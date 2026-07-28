@@ -20,7 +20,7 @@ export function now() {
 
 // CTA's Train Tracker payload encodes booleans as the strings "1"/"0" (per
 // the developer guide), not JSON booleans — this normalizes either shape.
-function toBool(v) {
+export function toBool(v) {
   return v === '1' || v === true || v === 1;
 }
 

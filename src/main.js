@@ -25,21 +25,24 @@ setInterval(() => {
 }, 1000);
 
 async function boot() {
-  // Fetched in parallel — tracks and stations have no data dependency on
-  // each other, so awaiting them sequentially would add stations' latency
-  // on top of tracks' for no reason. Stations are guarded (a U8 addition to
-  // a pipeline that predates them): a missing/failed stations.json should
-  // dim the ring layer, not black out the map the way an unguarded
-  // tracks.json failure would.
-  const [tracks, stations] = await Promise.all([
-    fetch('/data/tracks.json').then((r) => r.json()),
-    fetch('/data/stations.json')
-      .then((r) => (r.ok ? r.json() : {}))
-      .catch((err) => {
-        console.warn('[chi-tron] stations.json failed to load, station rings disabled:', err.message);
-        return {};
-      }),
-  ]);
+  // tracks.json is load-bearing — the map can't render anything without it,
+  // so boot() awaits it directly. stations.json is NOT awaited here: it's
+  // optional (a missing/failed load only dims the ring layer, never blocks
+  // the map), and gating boot on it via Promise.all would let a stalled —
+  // not even failed — connection to it hang map init forever, since a fetch
+  // that never settles never reaches the .catch that would otherwise turn it
+  // into {}. Fetching it independently means boot only ever waits on the
+  // resource that's actually required.
+  const tracks = await fetch('/data/tracks.json').then((r) => r.json());
+  let stations = {};
+  fetch('/data/stations.json')
+    .then((r) => (r.ok ? r.json() : {}))
+    .then((data) => {
+      stations = data; // picked up by frame()'s closure on the next tick
+    })
+    .catch((err) => {
+      console.warn('[chi-tron] stations.json failed to load, station rings disabled:', err.message);
+    });
 
   const map = new maplibregl.Map({
     container: 'map',

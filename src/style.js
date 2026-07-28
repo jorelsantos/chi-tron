@@ -2,13 +2,12 @@
 // OpenFreeMap planet tiles (keyless), every color ours. No labels: the city
 // reads as silhouette and light, not cartography.
 
-export const CHICAGO_LOOP = [-87.6298, 41.8781];
-
 // Both camera presets below share this center — U12's sidebar docks left at
-// ~300px, so every framing is biased east of the true Loop center to keep
-// the downtown core in the visible map area rather than behind the panel.
-// One constant, not a copy per preset, so the two can't drift apart.
-const SIDEBAR_BIASED_CENTER = [-87.6198, 41.8781]; // ~0.008deg (~660m) east of CHICAGO_LOOP
+// ~300px, so every framing is biased east of the true Chicago Loop
+// (-87.6298, 41.8781) to keep the downtown core in the visible map area
+// rather than behind the panel. One constant, not a copy per preset, so the
+// two can't drift apart.
+const SIDEBAR_BIASED_CENTER = [-87.6198, 41.8781]; // ~0.008deg (~660m) east of the Loop
 
 // U7: fixed framing for the "shipping" view. Later units (sidebar in U12,
 // camera presets in U13) tune against this exact constant rather than

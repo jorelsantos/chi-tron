@@ -53,7 +53,7 @@ const TRAIL_LENGTH = 45; // seconds of visible trail
 // consistent across the whole light-cycle stack. Every branch returns the
 // same shape (including `brightBoost`) so callers can read it directly
 // without an `?? 1` fallback.
-function trainStyle(t, currentTime) {
+export function trainStyle(t, currentTime) {
   const staleFade = t.state === 'stale' ? 0.35 : 1;
   if (t.isDly) {
     // Slow red-shifted pulse — distinct from the steady glow of a normal
@@ -115,6 +115,13 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   const shownStyled = shown.map((t) => ({ t, style: trainStyle(t, currentTime) }));
 
   const shownStations = getShownStations(stations, visibleLines, display);
+  // Color priority for a multi-line station: prefer a line the user hasn't
+  // toggled off. Without this, a station keeps the color of a hidden line
+  // for as long as any other served line stays visible — the ring looks
+  // like it belongs to a line that isn't even rendering. shownStations is
+  // already filtered to "at least one served line is visible", so find()
+  // always succeeds; the ?? is a defensive fallback, not the normal path.
+  const stationColorLine = (d) => d.lines.find((l) => visibleLines.has(l)) ?? d.lines[0];
 
   return [
     new TripsLayer({
@@ -190,7 +197,7 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       id: 'station-halo',
       data: shownStations,
       getPosition: (d) => d.coords,
-      getFillColor: (d) => [...LINE_COLORS[d.lines[0]], 20 + 45 * d.weight],
+      getFillColor: (d) => [...LINE_COLORS[stationColorLine(d)], 20 + 45 * d.weight],
       getRadius: (d) => 16 + 44 * d.weight,
       radiusUnits: 'meters',
       radiusMinPixels: 2,
@@ -202,7 +209,7 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       getPosition: (d) => d.coords,
       filled: false,
       stroked: true,
-      getLineColor: (d) => [...LINE_COLORS[d.lines[0]], 150 + 105 * d.weight],
+      getLineColor: (d) => [...LINE_COLORS[stationColorLine(d)], 150 + 105 * d.weight],
       getLineWidth: (d) => 1.2 + 2.3 * d.weight,
       lineWidthUnits: 'pixels',
       lineWidthMinPixels: 1,

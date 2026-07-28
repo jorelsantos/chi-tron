@@ -252,6 +252,11 @@ for (const [id, s] of stations) {
     // Fallback proxy (only reached if the API fetch above failed outright):
     // Loop stations blaze, everything else is a uniform ember. Documented
     // in the WARNING above and here so this never looks like real data.
+    // `rides` stays null like the per-station-miss case above, but this is
+    // a different situation (no fetch was ever attempted, not "this one
+    // station had no row") — weightSource distinguishes the two so a test
+    // asserting "no ridership row -> floor weight" isn't tripped by the
+    // proxy's intentionally non-floor weights.
     weight = inLoopBbox(s.coords) ? WEIGHT_CEIL : WEIGHT_FLOOR + 0.25 * (WEIGHT_CEIL - WEIGHT_FLOOR);
   }
   stationsOut[id] = {
@@ -261,6 +266,7 @@ for (const [id, s] of stations) {
     lines: L_ROUTES.filter((r) => s.lines.has(r)), // stable order for color priority
     weight: Number(weight.toFixed(4)),
     rides,
+    ...(ridershipByStationId ? {} : { weightSource: 'proxy' }),
   };
 }
 if (ridershipByStationId) {

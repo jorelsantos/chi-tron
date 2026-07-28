@@ -100,8 +100,14 @@ describe('stations.json', () => {
   });
 
   it('a station missing ridership data gets the floor weight, not NaN or a dropped station', () => {
+    // rides == null covers two different situations in build-tracks.mjs:
+    // (a) the ridership API succeeded overall but had no row for this one
+    // station -> floor weight, the case this test guards; (b) the API
+    // fetch failed outright, so every station falls back to a bbox-based
+    // Loop/outlying proxy by design, intentionally NOT at the floor.
+    // weightSource: 'proxy' marks (b) so it doesn't trip this assertion.
     for (const s of Object.values(stations)) {
-      if (s.rides == null) {
+      if (s.rides == null && s.weightSource !== 'proxy') {
         expect(s.weight).toBe(WEIGHT_FLOOR);
       }
     }

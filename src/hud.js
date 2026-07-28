@@ -178,12 +178,18 @@ export function createHud({ map, lineColors, visibleLines, display, trackGlowLay
   // away (R7).
   function flyToPreset(btn, preset) {
     btn.classList.add('is-flying');
+    // Call flyTo BEFORE registering this button's listener. Interrupting an
+    // in-flight ease fires 'moveend' synchronously, inside this same call,
+    // for every listener already registered — which correctly clears the
+    // previous button's highlight. Registering our own listener first would
+    // let that same synchronous fire also catch (and instantly clear) this
+    // button's just-added highlight, before its own flight even starts.
+    map.flyTo({ ...preset, duration: FLY_DURATION_MS, essential: true });
     const onMoveEnd = () => {
       btn.classList.remove('is-flying');
       map.off('moveend', onMoveEnd);
     };
     map.on('moveend', onMoveEnd);
-    map.flyTo({ ...preset, duration: FLY_DURATION_MS, essential: true });
   }
 
   for (const { label, preset } of CAMERA_PRESETS) {
