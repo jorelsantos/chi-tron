@@ -167,3 +167,16 @@ describe('capBuses', () => {
     expect(capBuses(buses, [0, 0], 5)).toEqual(buses);
   });
 });
+
+describe('BusEngine.clear (U16)', () => {
+  it('drops every bus regardless of mock/live origin', () => {
+    const engine = new BusEngine({
+      patterns: { p1: { pid: 'p1', rt: '22', points: [{ lat: 0, lon: 0, pdist: 0 }, { lat: 1, lon: 0, pdist: 100 }] } },
+      routes: { 22: ['p1'] },
+    });
+    engine.seedMock(1);
+    expect(engine.buses.size).toBeGreaterThan(0);
+    engine.clear();
+    expect(engine.buses.size).toBe(0);
+  });
+});

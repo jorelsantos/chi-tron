@@ -175,6 +175,34 @@
       color: #fff;
     }
 
+    /* U16: MODE — the app's primary two-state affordance (R13), so it's a
+       segmented control at the very top of the sidebar rather than one more
+       row buried in DISPLAY. Both states always visible; the active one
+       reads as pressed. */
+    #mode-rows { display: flex; gap: 6px; }
+    .mode-btn {
+      flex: 1 1 0; border: 1px solid rgba(160, 190, 255, 0.25); border-radius: 5px;
+      padding: 8px 6px; background: rgba(5, 8, 17, 0.55);
+      color: var(--hud-dim); font-family: inherit; font-weight: 700;
+      font-size: 12px; letter-spacing: 0.16em; text-align: center; cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .mode-btn:hover { background: rgba(5, 8, 17, 0.8); }
+    .mode-btn[aria-pressed="true"] {
+      background: rgba(0, 212, 255, 0.16);
+      border-color: rgba(0, 212, 255, 0.6);
+      color: #fff;
+      text-shadow: 0 0 6px rgba(0, 212, 255, 0.6);
+    }
+    /* U16 step 3: a LIVE mode that can't connect falls back to EXPLORE
+       visibly, not silently — this note flashes briefly rather than sitting
+       permanently once the fallback has already happened. */
+    #mode-fallback-note {
+      font-size: 10px; letter-spacing: 0.08em; color: #ffb020;
+      margin-top: 6px; display: none;
+    }
+    #mode-fallback-note.visible { display: block; }
+
     /* U15: SYSTEM STATUS — read-only rows, not buttons (nothing to toggle
        here), listing any line not in normal service. */
     #status-rows { display: flex; flex-direction: column; gap: 6px; }
@@ -225,6 +253,12 @@
   <!-- U12: instrument sidebar. Row content (line rows + display toggles) is
        built by src/hud.js — this is just the docked glass shell. -->
   <div class="hud" id="sidebar">
+    <!-- U16 (R13): MODE — the primary EXPLORE/LIVE affordance, first in the
+         sidebar rather than a DISPLAY row. -->
+    <div class="panel-section">
+      <div id="mode-rows" role="group" aria-label="Explore or Live mode"></div>
+      <div id="mode-fallback-note">LIVE UNAVAILABLE — FELL BACK TO EXPLORE</div>
+    </div>
     <div class="panel-section">
       <div class="panel-header">
         <span class="panel-title">LINES</span>

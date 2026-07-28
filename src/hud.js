@@ -67,7 +67,16 @@ const EM_DASH = '—';
  * @param {string[]} opts.trackGlowLayerIds  the l-tracks-* MapLibre layer ids
  * @param {() => string} opts.getStatus  returns 'live' | 'mock' | 'lost' | 'boot'
  */
-export function createHud({ map, lineColors, visibleLines, display, trackGlowLayerIds, getStatus }) {
+export function createHud({
+  map,
+  lineColors,
+  visibleLines,
+  display,
+  trackGlowLayerIds,
+  getStatus,
+  mode = 'explore',
+  onModeChange,
+}) {
   const lineRowsEl = document.getElementById('line-rows');
   const displayRowsEl = document.getElementById('display-rows');
   const telemetryCountEl = document.getElementById('telemetry-count');
@@ -76,6 +85,43 @@ export function createHud({ map, lineColors, visibleLines, display, trackGlowLay
   const lineButtons = new Map();
   const lineCountEls = new Map();
   const displayButtons = new Map();
+
+  // ---- MODE (U16, R13) ---------------------------------------------------
+  // The app's primary two-state affordance — both states always rendered,
+  // the active one reads as pressed, exactly like the CAMERA presets'
+  // convention but persistent (aria-pressed) rather than momentary.
+
+  const modeRowsEl = document.getElementById('mode-rows');
+  const fallbackNoteEl = document.getElementById('mode-fallback-note');
+  const modeButtons = new Map();
+  let fallbackNoteTimer = null;
+
+  function setMode(newMode) {
+    for (const [key, btn] of modeButtons) btn.setAttribute('aria-pressed', String(key === newMode));
+  }
+
+  // U16 step 3: called when LIVE couldn't connect and main.js has already
+  // fallen back to EXPLORE — a brief, self-clearing note rather than a
+  // permanent fixture, so it reads as "this just happened," not as an
+  // ongoing state (setMode('explore') above is what represents the ongoing
+  // state).
+  function flashFallbackNote() {
+    if (!fallbackNoteEl) return;
+    fallbackNoteEl.classList.add('visible');
+    clearTimeout(fallbackNoteTimer);
+    fallbackNoteTimer = setTimeout(() => fallbackNoteEl.classList.remove('visible'), 6000);
+  }
+
+  for (const key of ['explore', 'live']) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mode-btn';
+    btn.textContent = key.toUpperCase();
+    btn.setAttribute('aria-pressed', String(key === mode));
+    btn.addEventListener('click', () => onModeChange?.(key));
+    modeRowsEl?.appendChild(btn);
+    modeButtons.set(key, btn);
+  }
 
   // ---- LINES section -----------------------------------------------------
 
@@ -307,5 +353,5 @@ export function createHud({ map, lineColors, visibleLines, display, trackGlowLay
 
   refreshSystemStatus(); // empty state until the first alerts poll resolves
 
-  return { tick, applyLineFilters, setBuildingsVisible, refreshSystemStatus };
+  return { tick, applyLineFilters, setBuildingsVisible, refreshSystemStatus, setMode, flashFallbackNote };
 }

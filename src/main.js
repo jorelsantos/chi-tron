@@ -9,7 +9,12 @@ import { AlertsEngine } from './alerts.js';
 import { buildLayers, LINE_COLORS, rgbString, lineStressTreatment } from './layers.js';
 import { createHud } from './hud.js';
 
-const MOCK = new URLSearchParams(location.search).has('mock');
+// U16 (R13): `?mock=1` still works as a deep link into EXPLORE (already the
+// default, so it's a no-op beyond "don't error"); `?live=1` is the new
+// override for LIVE. Neither wins if both are present in an odd deep link —
+// `live` is checked first, so that's the one that takes it.
+const params = new URLSearchParams(location.search);
+let mode = params.has('live') ? 'live' : 'explore';
 const statusEl = document.getElementById('status');
 const busStatusEl = document.getElementById('bus-status');
 const clockEl = document.getElementById('clock');
@@ -88,7 +93,10 @@ async function boot() {
     .then((patternsData) => {
       busEngine = new BusEngine(patternsData);
       busEngine.onStatus = setBusStatus;
-      if (MOCK) {
+      // U16: applies whatever mode is *current* at the moment patterns.json
+      // resolves — if the user already toggled to LIVE while this was still
+      // loading, `mode` (closed over below, not copied) already reflects that.
+      if (mode === 'explore') {
         busEngine.seedMock(3);
         setBusStatus('mock');
       } else {
@@ -243,7 +251,6 @@ async function boot() {
   map.addControl(overlay);
 
   const engine = new TrainEngine(tracks);
-  engine.onStatus = setStatus;
   const visibleLines = new Set(Object.keys(tracks));
   // U12's DISPLAY toggles — buildLayers() reads trains/buses/stations;
   // buildings isn't part of the deck.gl stack so hud.js applies it straight
@@ -261,14 +268,47 @@ async function boot() {
     display,
     trackGlowLayerIds: TRACK_GLOW_LAYER_IDS,
     getStatus: () => feedStatus,
+    mode,
+    onModeChange: applyMode,
   });
 
-  if (MOCK) {
-    engine.seedMock(4);
-    setStatus('mock');
-  } else {
-    engine.startLive();
+  // U16 (R13, KTD11): the single place that owns entering either mode.
+  // Always stop() + clear() before (re-)seeding/starting — idempotent and
+  // order-safe regardless of which mode was previously active (including
+  // "none yet," at boot), which is what makes repeated toggling leave
+  // exactly one active vehicle set with no orphaned timers (Poller.stop()
+  // clears its own interval + visibilitychange listener every time).
+  function applyMode(newMode) {
+    mode = newMode;
+    hud.setMode(mode);
+    engine.stop();
+    engine.clear();
+    busEngine?.stop();
+    busEngine?.clear();
+    if (mode === 'explore') {
+      engine.seedMock(4);
+      setStatus('mock');
+      if (busEngine) {
+        busEngine.seedMock(3);
+        setBusStatus('mock');
+      }
+    } else {
+      engine.startLive();
+      busEngine?.startLive();
+    }
   }
+  // U16 step 3: a LIVE mode that can't reach the (primary, train) feed
+  // falls back to EXPLORE visibly rather than leaving the map looking
+  // emptily "successful." Wired before the first applyMode() call below so
+  // even that first LIVE attempt (from `?live=1`) is covered.
+  engine.onStatus = (state) => {
+    setStatus(state);
+    if (state === 'lost' && mode === 'live') {
+      applyMode('explore');
+      hud.flashFallbackNote();
+    }
+  };
+  applyMode(mode);
 
   // U15: no EXPLORE/LIVE split here — the High-Level Technical Design's
   // alerts path (AL -> SS) isn't gated by MODE like trains/buses are; it's

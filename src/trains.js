@@ -167,6 +167,16 @@ export class TrainEngine {
     this.poller?.stop();
   }
 
+  // U16: a clean mode switch needs to drop whichever vehicle set the
+  // *previous* mode populated before the new one starts — seedMock() alone
+  // only ever adds/overwrites its own `mock-*` ids, so switching LIVE ->
+  // EXPLORE without this would leave stale live runs sitting in the Map
+  // forever (their last poll simply never gets another update once
+  // stop()'d, so they'd never even age into 'stale'/'removed' on their own).
+  clear() {
+    this.trains.clear();
+  }
+
   async #pollOnce() {
     const res = await fetch(`/api/tt?rt=${ROUTES.join(',')}&outputType=JSON`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

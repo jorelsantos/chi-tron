@@ -58,3 +58,13 @@ describe('TrainEngine mock isDly/isApp re-roll', () => {
     expect(train.nextFlagRoll).toBe(before.nextFlagRoll);
   });
 });
+
+describe('TrainEngine.clear (U16)', () => {
+  it('drops every train regardless of mock/live origin', () => {
+    const engine = new TrainEngine(FAKE_TRACKS);
+    engine.seedMock(2);
+    expect(engine.trains.size).toBeGreaterThan(0);
+    engine.clear();
+    expect(engine.trains.size).toBe(0);
+  });
+});

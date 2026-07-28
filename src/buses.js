@@ -287,6 +287,12 @@ export class BusEngine {
     this.poller?.stop();
   }
 
+  // U16: mirrors trains.js's clear() exactly, for the same reason — a mode
+  // switch must drop whichever vehicle set the previous mode populated.
+  clear() {
+    this.buses.clear();
+  }
+
   // Two (or more) sequential 10-route-max getvehicles calls per attempt,
   // combined into one #ingest() so the seen/stale bookkeeping below runs
   // once per full poll against every route's result together — splitting
