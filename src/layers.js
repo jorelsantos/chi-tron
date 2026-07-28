@@ -136,6 +136,33 @@ export function trainStyle(t, currentTime) {
   return { core: [255, 255, 255], fade: staleFade, radiusMult: 1, brightBoost: 1 };
 }
 
+// U15 (R12): per-line disruption treatment for the train glow stack, keyed
+// off alerts.js's classifyRouteStatus() tag. Mirrors trainStyle()'s shape
+// (a pure function of state + currentTime) so a stressed line's glow
+// animates the same way an isDly train's does, rather than introducing a
+// second, differently-timed animation convention.
+export function lineStressTreatment(tag, currentTime) {
+  switch (tag) {
+    case 'planned':
+      // Slow breathing pulse, amber — "planned work" reads as calm, not urgent.
+      return { color: [255, 180, 40], opacityMult: 0.55 + 0.45 * Math.sin(currentTime * Math.PI * 0.4) };
+    case 'incident':
+      // Fast, unstable flicker, red-shifted — an active incident reads as alarm.
+      return { color: [255, 60, 40], opacityMult: 0.5 + 0.5 * Math.abs(Math.sin(currentTime * Math.PI * 2.5)) };
+    case 'added':
+      // Brighter, cooler cast, steady — more service is good news, not a warning.
+      return { color: [140, 220, 255], opacityMult: 1 };
+    default:
+      return { color: null, opacityMult: 1 };
+  }
+}
+
+const ACCESSIBILITY_GLYPH_COLOR = [255, 190, 60];
+// Stable shared default for the `accessibilityStations` option below —
+// avoids allocating a new empty Set every buildLayers() call (60x/sec) for
+// every caller that doesn't pass one.
+const EMPTY_SET = new Set();
+
 // Stations only change when a line is toggled or the DISPLAY toggle flips —
 // essentially never, frame-to-frame. Recomputing the ridership-filtered list
 // from scratch every frame (60x/sec) is pure waste, so it's cached here
@@ -166,6 +193,8 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
     viewportCenter = [0, 0],
     cars = [],
     zoom = 0,
+    lineStatus = {},
+    accessibilityStations = EMPTY_SET,
   } = options;
 
   // U12's DISPLAY toggles: `trains`/`stations` off means "don't draw this
@@ -176,9 +205,15 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
     ? trains.filter((t) => t.pos && visibleLines.has(t.line) && t.state !== 'removed')
     : [];
   // Style computed once per frame per train and attached directly to a
-  // {t, style} pair — the three glow-head layers below read d.style as a
-  // plain field instead of doing a Map.get(d) per accessor call.
-  const shownStyled = shown.map((t) => ({ t, style: trainStyle(t, currentTime) }));
+  // {t, style, stress} triple — the three glow-head layers below read
+  // d.style/d.stress as plain fields instead of doing a Map.get(d) per
+  // accessor call. stress is U15's per-line disruption treatment (R12) —
+  // independent of style, which is per-train (isDly/isApp), not per-line.
+  const shownStyled = shown.map((t) => ({
+    t,
+    style: trainStyle(t, currentTime),
+    stress: lineStressTreatment(lineStatus[t.line], currentTime),
+  }));
 
   // U9: same "off = empty array, not a conditionally-omitted layer" pattern
   // as trains/stations above. capBuses() is the render-budget safety net
@@ -320,12 +355,17 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       radiusMinPixels: 1.2,
       parameters: { depthTest: false },
     }),
-    // wide halo
+    // wide halo — U15: a stressed line's own color (from lineStressTreatment)
+    // overrides the line's normal color; opacityMult layers its pulse/flicker
+    // on top of the existing isDly/isApp fade.
     new ScatterplotLayer({
       id: 'glow-halo',
       data: shownStyled,
       getPosition: (d) => d.t.pos,
-      getFillColor: (d) => [...LINE_COLORS[d.t.line], 40 * d.style.fade * d.style.brightBoost],
+      getFillColor: (d) => [
+        ...(d.stress.color ?? LINE_COLORS[d.t.line]),
+        40 * d.style.fade * d.style.brightBoost * d.stress.opacityMult,
+      ],
       getRadius: (d) => 120 * d.style.radiusMult,
       radiusUnits: 'meters',
       radiusMinPixels: 10,
@@ -336,7 +376,10 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       id: 'glow-mid',
       data: shownStyled,
       getPosition: (d) => d.t.pos,
-      getFillColor: (d) => [...LINE_COLORS[d.t.line], 110 * d.style.fade * d.style.brightBoost],
+      getFillColor: (d) => [
+        ...(d.stress.color ?? LINE_COLORS[d.t.line]),
+        110 * d.style.fade * d.style.brightBoost * d.stress.opacityMult,
+      ],
       getRadius: (d) => 45 * d.style.radiusMult,
       radiusUnits: 'meters',
       radiusMinPixels: 5,
@@ -383,6 +426,25 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       getRadius: (d) => 12 + 28 * d.weight,
       radiusUnits: 'meters',
       radiusMinPixels: 2,
+      parameters: { depthTest: false },
+    }),
+    // U15 (R12) step 3: a small amber glyph marks a station with an active
+    // accessibility/elevator alert — infrastructure trouble reading at
+    // station scale, distinct from (and rendered on top of) that station's
+    // own line-colored ring above.
+    new ScatterplotLayer({
+      id: 'station-accessibility',
+      data: shownStations.filter((d) => accessibilityStations.has(d.id)),
+      getPosition: (d) => d.coords,
+      filled: false,
+      stroked: true,
+      getLineColor: [...ACCESSIBILITY_GLYPH_COLOR, 235],
+      getLineWidth: 1.6,
+      lineWidthUnits: 'pixels',
+      lineWidthMinPixels: 1.5,
+      getRadius: 26,
+      radiusUnits: 'meters',
+      radiusMinPixels: 5,
       parameters: { depthTest: false },
     }),
   ];

@@ -29,6 +29,14 @@ export default defineConfig(({ mode }) => {
             path.replace(/^\/api\/bus/, '/bustime/api/v3') +
             `&key=${env.CTA_BUS_KEY}`,
         },
+        // U15: CTA's Customer Alerts API (Route Status + Detailed Alerts) --
+        // both keyless per CTA's own developer docs, so no key injection
+        // here at all, unlike the two proxies above.
+        '/api/alerts': {
+          target: 'https://lapi.transitchicago.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/alerts/, '/api/1.0'),
+        },
       },
     },
   };

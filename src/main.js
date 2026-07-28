@@ -5,7 +5,8 @@ import { DARK_CITY_STYLE, FALLBACK_STYLE, LOOP_PRESET } from './style.js';
 import { TrainEngine, now } from './trains.js';
 import { BusEngine } from './buses.js';
 import { CarEngine } from './cars.js';
-import { buildLayers, LINE_COLORS, rgbString } from './layers.js';
+import { AlertsEngine } from './alerts.js';
+import { buildLayers, LINE_COLORS, rgbString, lineStressTreatment } from './layers.js';
 import { createHud } from './hud.js';
 
 const MOCK = new URLSearchParams(location.search).has('mock');
@@ -152,8 +153,13 @@ async function boot() {
   // `trackGlowLayerIds` param passed to createHud() below.
   const TRACK_GLOW_LAYER_IDS = ['l-tracks-wide', 'l-tracks-mid', 'l-tracks-core'];
   function addTrackUnderglow() {
+    // U15: a stable string `id` per feature is what lets the frame loop
+    // below target this exact feature with setFeatureState() every frame —
+    // GeoJSON sources need an explicit id for that; the line key is already
+    // unique so it doubles as one with no extra bookkeeping.
     const features = Object.entries(tracks).map(([key, line]) => ({
       type: 'Feature',
+      id: key,
       properties: {
         line: key,
         color: LINE_COLORS[key] ? rgbString(LINE_COLORS[key]) : 'rgb(80, 80, 120)',
@@ -165,6 +171,17 @@ async function boot() {
       type: 'geojson',
       data: { type: 'FeatureCollection', features },
     });
+    // U15: every pass's opacity carries an extra multiplier read from
+    // per-feature state (default 1 — untouched until the frame loop below
+    // has ever called setFeatureState for that line). Only opacity, not
+    // color, is feature-state driven here: unlike the deck.gl train glow in
+    // layers.js (plain JS, recomputed every frame with no such limit),
+    // animating a MapLibre paint *color* smoothly via feature-state risks a
+    // gap before the first frame writes a value — a numeric multiplier
+    // defaulting safely to 1 via `coalesce` has no such failure mode. The
+    // moving trains' own glow already carries the full color shift (R12);
+    // this is a subtler, opacity-only echo on the static network.
+    const stressOpacity = ['coalesce', ['feature-state', 'stressOpacity'], 1];
     // Wide soft bloom halo — most of the "glow" read comes from this pass.
     map.addLayer({
       id: 'l-tracks-wide',
@@ -172,7 +189,7 @@ async function boot() {
       source: 'l-tracks',
       paint: {
         'line-color': ['get', 'color'],
-        'line-opacity': 0.14,
+        'line-opacity': ['*', 0.14, stressOpacity],
         'line-width': ['interpolate', ['linear'], ['zoom'], 12, 5, 16, 16],
         'line-blur': 3,
       },
@@ -185,7 +202,7 @@ async function boot() {
       source: 'l-tracks',
       paint: {
         'line-color': ['get', 'color'],
-        'line-opacity': 0.4,
+        'line-opacity': ['*', 0.4, stressOpacity],
         'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2, 16, 5],
         'line-blur': 1,
       },
@@ -199,7 +216,7 @@ async function boot() {
       source: 'l-tracks',
       paint: {
         'line-color': ['get', 'color'],
-        'line-opacity': 0.95,
+        'line-opacity': ['*', 0.95, stressOpacity],
         'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.6, 16, 1.6],
       },
     });
@@ -253,6 +270,15 @@ async function boot() {
     engine.startLive();
   }
 
+  // U15: no EXPLORE/LIVE split here — the High-Level Technical Design's
+  // alerts path (AL -> SS) isn't gated by MODE like trains/buses are; it's
+  // real, keyless and cheap in both modes, so there's nothing to simulate.
+  const alertsEngine = new AlertsEngine();
+  alertsEngine.onStatus = () => {
+    hud.refreshSystemStatus(alertsEngine.lineStatus, alertsEngine.lineHeadline);
+  };
+  alertsEngine.startLive();
+
   // Rolling FPS meter — nothing in the repo measures frame rate yet, and
   // KTD8's 30fps floor is unmeasurable without it. Exponential moving
   // average of instantaneous per-frame rate, smoothed enough to read
@@ -290,8 +316,19 @@ async function boot() {
     const cars = carEngine ? carEngine.tick(now(), map.getBounds()) : [];
     hud.tick(trains);
     const center = map.getCenter();
+    const currentTime = now();
+    // U15: pushes each line's current opacity pulse onto its l-tracks-* GeoJSON
+    // feature every frame — see addTrackUnderglow()'s stressOpacity comment for
+    // why this is opacity-only, not a color change, on this particular layer.
+    if (map.getSource('l-tracks')) {
+      for (const key of Object.keys(tracks)) {
+        const tag = alertsEngine.lineStatus[key] ?? 'normal';
+        const opacityMult = lineStressTreatment(tag, currentTime).opacityMult;
+        map.setFeatureState({ source: 'l-tracks', id: key }, { stressOpacity: opacityMult });
+      }
+    }
     overlay.setProps({
-      layers: buildLayers(trains, now(), visibleLines, {
+      layers: buildLayers(trains, currentTime, visibleLines, {
         trailVersion: engine.trailVersion,
         stations,
         display,
@@ -300,6 +337,8 @@ async function boot() {
         viewportCenter: [center.lng, center.lat],
         cars,
         zoom: map.getZoom(),
+        lineStatus: alertsEngine.lineStatus,
+        accessibilityStations: alertsEngine.stationFlags,
       }),
     });
     requestAnimationFrame(frame);
@@ -312,6 +351,7 @@ async function boot() {
   window.__hud = hud;
   window.__busEngine = () => busEngine; // a getter, since busEngine is reassigned once patterns.json resolves
   window.__carEngine = () => carEngine; // same shape, for roads.json
+  window.__alertsEngine = alertsEngine;
 }
 
 boot();

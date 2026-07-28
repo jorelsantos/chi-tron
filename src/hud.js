@@ -210,6 +210,46 @@ export function createHud({ map, lineColors, visibleLines, display, trackGlowLay
     cameraRowsEl?.appendChild(btn);
   }
 
+  // ---- System status (U15, R12) -----------------------------------------
+  // Rebuilt on demand (main.js calls this once per AlertsEngine poll, every
+  // 120s) rather than every animation frame — the sidebar text itself isn't
+  // part of the 60x/sec render loop, only the map's own light treatment is.
+
+  const statusRowsEl = document.getElementById('status-rows');
+
+  function refreshSystemStatus(lineStatus = {}, lineHeadline = {}) {
+    if (!statusRowsEl) return;
+    statusRowsEl.replaceChildren();
+    const stressedKeys = LINE_KEYS.filter((k) => (lineStatus[k] ?? 'normal') !== 'normal');
+
+    if (stressedKeys.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'status-empty';
+      empty.textContent = 'ALL LINES NORMAL';
+      statusRowsEl.appendChild(empty);
+      return;
+    }
+
+    for (const key of stressedKeys) {
+      const row = document.createElement('div');
+      row.className = 'status-row';
+
+      const name = document.createElement('span');
+      name.className = 'status-line';
+      name.style.color = rgbString(lineColors[key] ?? [160, 160, 160]);
+      name.textContent = LINE_NAMES[key] ?? key;
+
+      const headline = document.createElement('span');
+      headline.className = 'status-headline';
+      const text = lineHeadline[key] || lineStatus[key];
+      headline.textContent = text;
+      headline.title = text; // full text on hover — the CSS truncation is visual-only
+
+      row.append(name, headline);
+      statusRowsEl.appendChild(row);
+    }
+  }
+
   // ---- Compass ------------------------------------------------------------
 
   function updateCompass() {
@@ -265,5 +305,7 @@ export function createHud({ map, lineColors, visibleLines, display, trackGlowLay
     if (telemetryCountEl) telemetryCountEl.textContent = String(inView);
   }
 
-  return { tick, applyLineFilters, setBuildingsVisible };
+  refreshSystemStatus(); // empty state until the first alerts poll resolves
+
+  return { tick, applyLineFilters, setBuildingsVisible, refreshSystemStatus };
 }

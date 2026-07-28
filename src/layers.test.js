@@ -5,7 +5,7 @@
 // `data` arrays (layer construction alone touches no WebGL/canvas).
 
 import { describe, it, expect } from 'vitest';
-import { trainStyle, buildLayers } from './layers.js';
+import { trainStyle, buildLayers, lineStressTreatment } from './layers.js';
 
 function layerById(layers, id) {
   return layers.find((l) => l.id === id);
@@ -130,6 +130,67 @@ describe('buildLayers DISPLAY toggles and station cache', () => {
     // channels is unambiguous.
     expect(r).toBeGreaterThan(100);
     expect(b).toBeLessThan(100);
+  });
+});
+
+describe('lineStressTreatment (U15)', () => {
+  it('returns no color override and full opacity for a normal/unknown tag', () => {
+    expect(lineStressTreatment('normal', 0)).toEqual({ color: null, opacityMult: 1 });
+    expect(lineStressTreatment(undefined, 0)).toEqual({ color: null, opacityMult: 1 });
+  });
+
+  it('overrides color for planned, incident and added, each distinctly', () => {
+    const planned = lineStressTreatment('planned', 0);
+    const incident = lineStressTreatment('incident', 0);
+    const added = lineStressTreatment('added', 0);
+    expect(planned.color).not.toBeNull();
+    expect(incident.color).not.toBeNull();
+    expect(added.color).not.toBeNull();
+    expect(planned.color).not.toEqual(incident.color);
+    expect(planned.color).not.toEqual(added.color);
+  });
+
+  it('animates opacity over time for planned/incident, but holds steady for added', () => {
+    const t0 = lineStressTreatment('planned', 0).opacityMult;
+    const t1 = lineStressTreatment('planned', 1).opacityMult;
+    expect(t0).not.toBe(t1); // the breathing pulse actually moves
+    expect(lineStressTreatment('added', 0).opacityMult).toBe(lineStressTreatment('added', 5).opacityMult);
+  });
+});
+
+describe('buildLayers line stress and accessibility glyph (U15)', () => {
+  const visibleLines = new Set(['Red']);
+  const trains = [
+    { pos: [-87.6, 41.9], line: 'Red', state: 'tracking', trail: [{ lon: -87.6, lat: 41.9, t: 0 }] },
+  ];
+  const stations = { a: { id: 'a', coords: [-87.6, 41.9], lines: ['Red'], weight: 0.5 } };
+
+  it("uses the stressed line's override color on the glow-halo layer", () => {
+    const layers = buildLayers(trains, 0, visibleLines, {
+      display: { trains: true },
+      lineStatus: { Red: 'incident' },
+    });
+    const [r, g, b] = layerById(layers, 'glow-halo').props.getFillColor(
+      layerById(layers, 'glow-halo').props.data[0]
+    );
+    expect([r, g, b]).toEqual(lineStressTreatment('incident', 0).color);
+  });
+
+  it('renders an accessibility glyph only for a flagged station', () => {
+    const layers = buildLayers([], 0, visibleLines, {
+      stations,
+      display: { stations: true },
+      accessibilityStations: new Set(['a']),
+    });
+    expect(layerById(layers, 'station-accessibility').props.data).toHaveLength(1);
+  });
+
+  it('renders no accessibility glyphs when nothing is flagged', () => {
+    const layers = buildLayers([], 0, visibleLines, {
+      stations,
+      display: { stations: true },
+    });
+    expect(layerById(layers, 'station-accessibility').props.data).toHaveLength(0);
   });
 });
 

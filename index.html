@@ -175,6 +175,20 @@
       color: #fff;
     }
 
+    /* U15: SYSTEM STATUS — read-only rows, not buttons (nothing to toggle
+       here), listing any line not in normal service. */
+    #status-rows { display: flex; flex-direction: column; gap: 6px; }
+    .status-row {
+      display: flex; align-items: baseline; gap: 8px;
+      font-size: 11px; letter-spacing: 0.03em;
+    }
+    .status-row .status-line { flex: 0 0 auto; font-weight: 600; }
+    .status-row .status-headline {
+      flex: 1 1 auto; color: var(--hud-dim);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .status-empty { font-size: 11px; color: var(--hud-dim); letter-spacing: 0.03em; }
+
     #sidebar button:focus-visible,
     .hud button:focus-visible {
       outline: 2px solid var(--neon-cyan);
@@ -229,6 +243,14 @@
         <span class="panel-title">CAMERA</span>
       </div>
       <div id="camera-rows" role="group" aria-label="Camera presets"></div>
+    </div>
+    <!-- U15 (R12): disruption reads as light on the map itself; this block
+         is the text fallback for what's actually wrong, line by line. -->
+    <div class="panel-section">
+      <div class="panel-header">
+        <span class="panel-title">SYSTEM STATUS</span>
+      </div>
+      <div id="status-rows" role="status" aria-live="polite"></div>
     </div>
   </div>
 
