@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tracks": "node scripts/build-tracks.mjs",
     "patterns": "node --env-file=.env scripts/build-patterns.mjs",
+    "roads": "node scripts/build-roads.mjs",
     "test": "vitest run"
   },
   "dependencies": {
