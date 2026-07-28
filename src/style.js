@@ -17,6 +17,23 @@ export const LOOP_PRESET = {
   bearing: -12,
 };
 
+// U13: the "zoomed out to see the whole city" camera preset the CAMERA
+// section's CITY button flies to. Same center bias as LOOP_PRESET (so the
+// sidebar doesn't reframe what's centered), but zoomed way out and pitched
+// much gentler — this is meant to read as a real alternative to the tight,
+// dramatic LOOP_PRESET framing, not a minor variation on it. zoom 11.2
+// brings most of the city (Loop through the North Side and out past
+// Midway/O'Hare's inbound approach) into frame; pitch 35 keeps some of the
+// 3D skyline read without the steep, cinematic tilt of LOOP_PRESET's 60.
+// Bearing 0 (true north-up) contrasts with LOOP_PRESET's rotated -12 and
+// gives the compass a visible reason to move on flight.
+export const CITY_PRESET = {
+  center: [-87.6198, 41.8781],
+  zoom: 11.2,
+  pitch: 35,
+  bearing: 0,
+};
+
 // Building extrusion height exaggeration. OpenFreeMap's render_height is
 // generic/modeled, not surveyed — multiplying it lets the downtown core
 // dominate the skyline the way the reference does. Tuned by eye.

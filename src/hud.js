@@ -18,6 +18,8 @@
 // plan's Phase B for buses/cars/alerts) — this module deliberately does not
 // build toggles or status rows for anything that doesn't render yet.
 
+import { LOOP_PRESET, CITY_PRESET } from './style.js';
+
 const LINE_ORDER = ['Red', 'Blue', 'Brn', 'G', 'Org', 'P', 'Pink', 'Y'];
 
 const LINE_NAMES = {
@@ -37,6 +39,19 @@ const DISPLAY_TOGGLES = [
   { key: 'buildings', label: 'Buildings' },
   { key: 'stations', label: 'Stations' },
 ];
+
+// U13: the two camera presets the CAMERA section's buttons fly to. LOOP is
+// U7's boot framing (tight, dramatic); CITY is U13's new wide default. Both
+// constants live in style.js — flyTo consumes them exactly, no new numbers
+// invented here.
+const CAMERA_PRESETS = [
+  { key: 'loop', label: 'LOOP', preset: LOOP_PRESET },
+  { key: 'city', label: 'CITY', preset: CITY_PRESET },
+];
+// Fixed flight duration rather than MapLibre's distance-based default, so
+// LOOP<->CITY always reads as one deliberate, dramatic move regardless of
+// which preset the camera happens to be sitting at when clicked.
+const FLY_DURATION_MS = 2200;
 
 const EM_DASH = '—';
 
@@ -149,6 +164,39 @@ export function createHud({ map, lineColors, visibleLines, display, trackGlowLay
   // its own building layers under different ids, so this is a no-op there —
   // guarded by the getLayer() check in setBuildingsVisible).
   map.on('styledata', () => setBuildingsVisible(display.buildings));
+
+  // ---- CAMERA section -------------------------------------------------------
+
+  const cameraRowsEl = document.getElementById('camera-rows');
+
+  // Momentary flash while a flyTo is in flight, cleared on the map's own
+  // `moveend` (fires whether the flight completes naturally or a user
+  // gesture interrupts it) — never a persistent "active" state, since a
+  // sticky highlight would misreport the camera the instant the user pans
+  // away (R7).
+  function flyToPreset(btn, preset) {
+    btn.classList.add('is-flying');
+    const onMoveEnd = () => {
+      btn.classList.remove('is-flying');
+      map.off('moveend', onMoveEnd);
+    };
+    map.on('moveend', onMoveEnd);
+    map.flyTo({ ...preset, duration: FLY_DURATION_MS, essential: true });
+  }
+
+  for (const { label, preset } of CAMERA_PRESETS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'camera-row';
+
+    const name = document.createElement('span');
+    name.className = 'row-name';
+    name.textContent = label;
+
+    btn.append(name);
+    btn.addEventListener('click', () => flyToPreset(btn, preset));
+    cameraRowsEl?.appendChild(btn);
+  }
 
   // ---- Compass ------------------------------------------------------------
 

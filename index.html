@@ -113,7 +113,7 @@
 
     /* Shared row-button look: near-opaque scrim so legibility never depends
        on what the map draws underneath (glass recipe, R6). */
-    .line-row, .toggle-row {
+    .line-row, .toggle-row, .camera-row {
       display: flex; align-items: center; gap: 10px;
       width: 100%; border: 1px solid transparent; border-radius: 5px;
       padding: 6px 8px;
@@ -122,7 +122,7 @@
       text-align: left; cursor: pointer;
       transition: background 0.15s, opacity 0.15s, border-color 0.15s;
     }
-    .line-row:hover, .toggle-row:hover { background: rgba(5, 8, 17, 0.8); }
+    .line-row:hover, .toggle-row:hover, .camera-row:hover { background: rgba(5, 8, 17, 0.8); }
     .line-row .row-name, .toggle-row .row-name { flex: 1 1 auto; }
     .line-row .row-count {
       min-width: 26px; text-align: right; font-weight: 600; color: #fff;
@@ -144,6 +144,19 @@
     .toggle-row[aria-pressed="false"] { opacity: 0.45; }
     .toggle-row[aria-pressed="false"] .dot {
       background: transparent; box-shadow: inset 0 0 0 2px var(--hud-dim);
+    }
+
+    /* U13: camera preset buttons. Momentary, not stateful — no aria-pressed
+       dimming like line-row/toggle-row, since there's no persistent "on"
+       camera state to represent. `.is-flying` is added on click and removed
+       on the map's `moveend`, giving a brief in-flight brighten with no
+       highlight left over once the flight lands. */
+    #camera-rows { display: flex; flex-direction: column; gap: 4px; }
+    .camera-row { justify-content: center; font-weight: 600; letter-spacing: 0.18em; }
+    .camera-row.is-flying {
+      background: rgba(0, 212, 255, 0.22);
+      border-color: rgba(0, 212, 255, 0.55);
+      color: #fff;
     }
 
     #sidebar button:focus-visible,
@@ -193,6 +206,12 @@
         <span class="panel-title">DISPLAY</span>
       </div>
       <div id="display-rows" role="group" aria-label="Display layer toggles"></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">
+        <span class="panel-title">CAMERA</span>
+      </div>
+      <div id="camera-rows" role="group" aria-label="Camera presets"></div>
     </div>
   </div>
 
