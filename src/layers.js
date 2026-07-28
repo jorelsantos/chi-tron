@@ -6,7 +6,8 @@
 // white wherever several trains cluster.
 
 import { TripsLayer } from '@deck.gl/geo-layers';
-import { ScatterplotLayer } from '@deck.gl/layers';
+import { ScatterplotLayer, PathLayer } from '@deck.gl/layers';
+import { capBuses } from './buses.js';
 
 // U8: pushed past the literal CTA palette toward saturated neon (R2), and
 // away from the amber/orange building-crown hue src/style.js adds in U7
@@ -45,6 +46,46 @@ export function rgbString(color) {
 }
 
 const TRAIL_LENGTH = 45; // seconds of visible trail
+
+// U9 (R4, KTD12): buses read as a cool ice-blue/silver capsule against the
+// trains' saturated line-color-plus-hot-white-core treatment. Hue ~225°
+// sits in the untouched gap between Blue's ~195° and Purple's ~265° (a
+// ~30°/~40° margin either side — the same "minimum ~28° gap" convention
+// LINE_COLORS holds itself to), and its lightness (~0.71) is well above any
+// line color's (~0.53-0.6), so buses are distinct on brightness alone even
+// before hue registers. Verified via scripts run against rgbToHsl during
+// this unit's build.
+const BUS_COLOR = [150, 165, 210];
+// Render-budget safety net (KTD8): the ~20 marquee routes' live vehicle
+// count is unbounded by this app (unlike cars/trains) — CTA returns however
+// many buses are actually running. capBuses() (src/buses.js) enforces this
+// every frame, dropping whichever buses sit furthest from the viewport
+// center first.
+const BUS_CAP = 120;
+// Elongated capsule dimensions (KTD12: shape carries the vehicle-kind
+// distinction before color does). Deliberately stylized larger than a real
+// ~12m bus, the same way trains' glow discs aren't to-scale either — sized
+// so the capsule still reads as visibly elongated (not a dot) at
+// LOOP_PRESET's zoom, per the plan's explicit legibility requirement.
+const BUS_CAPSULE_HALF_LEN_M = 14;
+const BUS_CAPSULE_WIDTH_M = 5;
+// Buses get one dimmer, shorter trail pass — no 3-layer glow-head stack
+// like trains (KTD12: buses are not second-class, but they are cooler and
+// quieter).
+const BUS_TRAIL_LENGTH = 18;
+
+const M_PER_DEG_LAT_L = 111320;
+
+// Offsets `[lon, lat]` by `meters` along compass bearing `headingDeg`
+// (0 = north, clockwise) — used to build each bus's two-point capsule path
+// from its center position and direction of travel. Small enough offsets
+// (tens of meters) that the flat local-degrees approximation used elsewhere
+// in this repo (tracks.js's toMeters) is accurate well under a meter.
+function offsetPoint([lon, lat], headingDeg, meters) {
+  const rad = (headingDeg * Math.PI) / 180;
+  const mPerDegLonHere = 111320 * Math.cos((lat * Math.PI) / 180);
+  return [lon + (Math.sin(rad) * meters) / mPerDegLonHere, lat + (Math.cos(rad) * meters) / M_PER_DEG_LAT_L];
+}
 
 // R3: delayed trains pulse red-shifted; approaching trains brighten. Both
 // flags come from the CTA payload's isDly/isApp (surfaced in src/trains.js)
@@ -100,7 +141,14 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   // alerts — see the neon-city plan) adds more feeds here, and a growing
   // positional signature means every future addition is another
   // ordering-fragile slot at the one call site in src/main.js.
-  const { trailVersion = 0, stations = {}, display = { trains: true, stations: true } } = options;
+  const {
+    trailVersion = 0,
+    stations = {},
+    display = { trains: true, stations: true, buses: true },
+    buses = [],
+    busTrailVersion = 0,
+    viewportCenter = [0, 0],
+  } = options;
 
   // U12's DISPLAY toggles: `trains`/`stations` off means "don't draw this
   // layer at all," independent of the per-line `visibleLines` Set below.
@@ -113,6 +161,13 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   // {t, style} pair — the three glow-head layers below read d.style as a
   // plain field instead of doing a Map.get(d) per accessor call.
   const shownStyled = shown.map((t) => ({ t, style: trainStyle(t, currentTime) }));
+
+  // U9: same "off = empty array, not a conditionally-omitted layer" pattern
+  // as trains/stations above. capBuses() is the render-budget safety net
+  // (KTD8) — live bus count has no ceiling elsewhere in this app.
+  const shownBuses = display.buses
+    ? capBuses(buses.filter((b) => b.pos && b.state !== 'removed'), viewportCenter, BUS_CAP)
+    : [];
 
   const shownStations = getShownStations(stations, visibleLines, display);
   // Color priority for a multi-line station: prefer a line the user hasn't
@@ -152,6 +207,49 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
         blendAlphaSrcFactor: 'src-alpha',
         blendAlphaDstFactor: 'one',
       },
+    }),
+    // U9: buses' own dimmer, shorter, single-pass trail — no 3-layer
+    // glow-head stack like trains get (KTD12). Standard (non-additive)
+    // alpha blending, unlike trains' additive trail above, is part of what
+    // keeps this pass visually quieter.
+    new TripsLayer({
+      id: 'bus-trails',
+      data: shownBuses,
+      getPath: (d) => d.trail.map((p) => [p.lon, p.lat]),
+      getTimestamps: (d) => d.trail.map((p) => p.t),
+      getColor: BUS_COLOR,
+      currentTime,
+      trailLength: BUS_TRAIL_LENGTH,
+      fadeTrail: true,
+      capRounded: true,
+      jointRounded: true,
+      widthMinPixels: 2,
+      opacity: 0.45,
+      updateTriggers: { getPath: busTrailVersion, getTimestamps: busTrailVersion },
+      parameters: { depthTest: false },
+    }),
+    // U9 (R4, KTD12): the elongated capsule that carries the trains/buses/
+    // cars distinction by shape before color even registers. A two-point
+    // PathLayer segment centered on the bus and built from its real
+    // direction of travel — real geometry, so it orients correctly under
+    // any map bearing with no screen-space rotation math needed (unlike an
+    // IconLayer sprite, which would have to counter-rotate against the
+    // map's own bearing to stay geographically oriented).
+    new PathLayer({
+      id: 'bus-capsules',
+      data: shownBuses,
+      getPath: (d) => [
+        offsetPoint(d.pos, d.heading ?? 0, -BUS_CAPSULE_HALF_LEN_M),
+        offsetPoint(d.pos, d.heading ?? 0, BUS_CAPSULE_HALF_LEN_M),
+      ],
+      getColor: [...BUS_COLOR, 235],
+      getWidth: BUS_CAPSULE_WIDTH_M,
+      widthUnits: 'meters',
+      widthMinPixels: 4,
+      capRounded: true,
+      jointRounded: true,
+      updateTriggers: { getPath: busTrailVersion },
+      parameters: { depthTest: false },
     }),
     // wide halo
     new ScatterplotLayer({

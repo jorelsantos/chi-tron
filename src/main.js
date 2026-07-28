@@ -3,11 +3,13 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapboxOverlay } from '@deck.gl/mapbox';
 import { DARK_CITY_STYLE, FALLBACK_STYLE, LOOP_PRESET } from './style.js';
 import { TrainEngine, now } from './trains.js';
+import { BusEngine } from './buses.js';
 import { buildLayers, LINE_COLORS, rgbString } from './layers.js';
 import { createHud } from './hud.js';
 
 const MOCK = new URLSearchParams(location.search).has('mock');
 const statusEl = document.getElementById('status');
+const busStatusEl = document.getElementById('bus-status');
 const clockEl = document.getElementById('clock');
 const fpsEl = document.getElementById('fps');
 
@@ -27,6 +29,26 @@ function setStatus(state) {
         : state === 'hold'
           ? 'BUDGET HOLD'
           : 'LIVE FEED';
+}
+
+// U9: the bus feed's own status, distinct from the trains status above — a
+// missing/bad CTA_BUS_KEY must flip THIS indicator, not silently leave
+// #status reading LIVE FEED while the bus layer is empty (buses.js's
+// isAuthError() is what turns that failure mode into a real 'error' status
+// here, via BusEngine's onStatus callback).
+function setBusStatus(state) {
+  if (!busStatusEl) return;
+  busStatusEl.className = `hud ${state === 'lost' ? 'lost' : state === 'hold' ? 'hold' : 'live'}`;
+  busStatusEl.textContent =
+    state === 'mock'
+      ? 'BUS SIM'
+      : state === 'lost'
+        ? 'BUS LOST'
+        : state === 'hold'
+          ? 'BUS HOLD'
+          : state === 'disabled'
+            ? 'BUS OFF'
+            : 'BUS LIVE';
 }
 
 setInterval(() => {
@@ -51,6 +73,29 @@ async function boot() {
     })
     .catch((err) => {
       console.warn('[chi-tron] stations.json failed to load, station rings disabled:', err.message);
+    });
+
+  // U9: same guarded, non-blocking fetch pattern as stations.json above —
+  // patterns.json is required for buses to render at all (both live and
+  // mock mode interpolate against it), but a missing/failed build artifact
+  // must only disable the bus subsystem, never black-screen the whole map
+  // for anyone who hasn't run `npm run patterns` yet.
+  let busEngine = null;
+  fetch('/data/patterns.json')
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    .then((patternsData) => {
+      busEngine = new BusEngine(patternsData);
+      busEngine.onStatus = setBusStatus;
+      if (MOCK) {
+        busEngine.seedMock(3);
+        setBusStatus('mock');
+      } else {
+        busEngine.startLive();
+      }
+    })
+    .catch((err) => {
+      console.warn('[chi-tron] patterns.json failed to load, buses disabled:', err.message);
+      setBusStatus('disabled');
     });
 
   const map = new maplibregl.Map({
@@ -167,10 +212,10 @@ async function boot() {
   const engine = new TrainEngine(tracks);
   engine.onStatus = setStatus;
   const visibleLines = new Set(Object.keys(tracks));
-  // U12's DISPLAY toggles — buildLayers() reads trains/stations; buildings
-  // isn't part of the deck.gl stack so hud.js applies it straight to the
-  // MapLibre style instead of routing it through this object.
-  const display = { trains: true, buildings: true, stations: true };
+  // U12's DISPLAY toggles — buildLayers() reads trains/buses/stations;
+  // buildings isn't part of the deck.gl stack so hud.js applies it straight
+  // to the MapLibre style instead of routing it through this object.
+  const display = { trains: true, buses: true, buildings: true, stations: true };
 
   // U12: instrument sidebar + telemetry/compass chrome. Owns the LINES and
   // DISPLAY toggle DOM; mutates `visibleLines` and `display` in place so
@@ -216,12 +261,21 @@ async function boot() {
     }
 
     const trains = engine.tick();
+    // busEngine is null until patterns.json resolves (or forever, if it
+    // failed to load — see the guarded fetch above); an empty array here
+    // keeps buildLayers()'s "off = empty data, not an omitted layer"
+    // convention intact rather than needing a special no-bus-engine branch.
+    const buses = busEngine ? busEngine.tick() : [];
     hud.tick(trains);
+    const center = map.getCenter();
     overlay.setProps({
       layers: buildLayers(trains, now(), visibleLines, {
         trailVersion: engine.trailVersion,
         stations,
         display,
+        buses,
+        busTrailVersion: busEngine?.trailVersion ?? 0,
+        viewportCenter: [center.lng, center.lat],
       }),
     });
     requestAnimationFrame(frame);
@@ -232,6 +286,7 @@ async function boot() {
   window.__map = map;
   window.__engine = engine;
   window.__hud = hud;
+  window.__busEngine = () => busEngine; // a getter, since busEngine is reassigned once patterns.json resolves
 }
 
 boot();

@@ -35,6 +35,7 @@ const LINE_NAMES = {
 const BUILDING_LAYER_IDS = ['buildings-3d', 'buildings-3d-crown'];
 const DISPLAY_TOGGLES = [
   { key: 'trains', label: 'Trains' },
+  { key: 'buses', label: 'Buses' }, // U9
   { key: 'buildings', label: 'Buildings' },
   { key: 'stations', label: 'Stations' },
 ];

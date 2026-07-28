@@ -44,6 +44,18 @@
       top: 66px; right: 24px;
       font-size: 10px; letter-spacing: 0.2em; color: rgba(140, 160, 200, 0.5);
     }
+    /* U9: the bus feed's own status, distinct from #status (trains) above —
+       three independent feeds (U12 step 5's plan) means one shared light
+       would either hide a bus-only outage or misreport a live train feed as
+       down. Same class/color vocabulary as #status, smaller and dimmer
+       since it's the secondary indicator. */
+    #bus-status {
+      top: 80px; right: 24px;
+      font-size: 9px; letter-spacing: 0.26em; color: rgba(140, 160, 200, 0.6);
+    }
+    #bus-status.live { color: #3bff6f; text-shadow: 0 0 6px rgba(59, 255, 111, 0.5); }
+    #bus-status.lost { color: #ff3b4e; text-shadow: 0 0 6px rgba(255, 59, 78, 0.5); }
+    #bus-status.hold { color: #ffb020; text-shadow: 0 0 6px rgba(255, 176, 32, 0.5); }
     #disclaimer {
       bottom: 12px; left: 50%; transform: translateX(-50%); text-align: center;
       font-size: 9px; letter-spacing: 0.14em; color: rgba(140, 160, 200, 0.4);
@@ -53,7 +65,7 @@
        compass beneath it. Same right-edge alignment and .hud typography as
        the existing corner elements. */
     #telemetry {
-      top: 92px; right: 24px; text-align: right;
+      top: 106px; right: 24px; text-align: right;
     }
     #telemetry .telemetry-label {
       display: block; font-size: 9px; letter-spacing: 0.28em;
@@ -65,7 +77,7 @@
       text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
     }
     #compass {
-      top: 138px; right: 24px; width: 34px; height: 34px;
+      top: 152px; right: 24px; width: 34px; height: 34px;
     }
     #compass svg { width: 100%; height: 100%; display: block; overflow: visible; }
     #compass circle {
@@ -193,6 +205,7 @@
   <div class="hud" id="wordmark">CHI-TRON<small>CHICAGO TRANSIT GRID</small></div>
   <div class="hud" id="clock">--:--:--</div>
   <div class="hud" id="status">BOOT</div>
+  <div class="hud" id="bus-status">BUS BOOT</div>
   <div class="hud" id="fps">-- FPS</div>
 
   <!-- U12: instrument sidebar. Row content (line rows + display toggles) is
