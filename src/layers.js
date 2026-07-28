@@ -302,9 +302,13 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
     // any map bearing with no screen-space rotation math needed (unlike an
     // IconLayer sprite, which would have to counter-rotate against the
     // map's own bearing to stay geographically oriented).
+    // U17: the bus's own capsule body is its pickable target — already a
+    // forgiving-enough click area (its real rendered length/width), unlike
+    // cars below.
     new PathLayer({
       id: 'bus-capsules',
       data: shownBuses,
+      pickable: true,
       getPath: (d) => [
         offsetPoint(d.pos, d.heading ?? 0, -BUS_CAPSULE_HALF_LEN_M),
         offsetPoint(d.pos, d.heading ?? 0, BUS_CAPSULE_HALF_LEN_M),
@@ -321,9 +325,15 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
     // U11: ambient traffic — dark bodies so the amber/red light pairs (not
     // body color) carry the travel-direction read. Placed before the
     // transit glow stack below so trains/buses render on top of it.
+    // U17: pickable, same as the bus/train targets above — cars' rendered
+    // body is small (KTD2's intentional ambient-background scale), so this
+    // is a genuinely tighter click target than the other two vehicle kinds;
+    // an accepted tradeoff rather than something this unit re-sizes cars to
+    // fix, since that would fight U11's own render-budget tuning.
     new PathLayer({
       id: 'car-bodies',
       data: shownCars,
+      pickable: true,
       getPath: (d) => [
         offsetPoint(d.pos, d.heading, -CAR_BODY_HALF_LEN_M),
         offsetPoint(d.pos, d.heading, CAR_BODY_HALF_LEN_M),
@@ -358,9 +368,15 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
     // wide halo — U15: a stressed line's own color (from lineStressTreatment)
     // overrides the line's normal color; opacityMult layers its pulse/flicker
     // on top of the existing isDly/isApp fade.
+    // U17 (R14, KTD8): the pickable target for click-to-follow on trains —
+    // this pass specifically (not glow-mid/core) because its wide radius is
+    // the most forgiving click target of the three, and making only one of
+    // the three passes pickable (not all three) is what "vehicle layers
+    // only," not "every layer," actually bounds the picking cost to.
     new ScatterplotLayer({
       id: 'glow-halo',
       data: shownStyled,
+      pickable: true,
       getPosition: (d) => d.t.pos,
       getFillColor: (d) => [
         ...(d.stress.color ?? LINE_COLORS[d.t.line]),

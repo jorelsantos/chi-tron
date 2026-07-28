@@ -270,7 +270,64 @@ async function boot() {
     getStatus: () => feedStatus,
     mode,
     onModeChange: applyMode,
+    onReleaseFollow: releaseFollow,
   });
+
+  // U17 (R14): click-to-follow. `followed` is the single source of truth —
+  // {kind, id} or null — read every frame to recenter, and read by
+  // releaseFollow()/handleVehicleClick() to update it. Deliberately not a
+  // separate "is following" boolean plus "which vehicle" pair: one nullable
+  // value can't disagree with itself.
+  let followed = null;
+
+  function releaseFollow() {
+    if (!followed) return; // idempotent — camera preset clicks call this unconditionally
+    followed = null;
+    hud.setFollowLabel(null);
+  }
+
+  // A train's `id` is `${lineKey}-${runNumber}` live or `mock-${lineKey}-${i}`
+  // simulated (trains.js) — strips either prefix down to just the trailing
+  // run/index number for display, rather than showing the raw id verbatim.
+  function trailingId(id) {
+    return id.replace(/^mock-/, '').split('-').pop();
+  }
+
+  function followVehicle(kind, id, label) {
+    followed = { kind, id };
+    hud.setFollowLabel(label);
+  }
+
+  // The single onClick MapboxOverlay dispatches every canvas click through,
+  // pickable layer or not (info.picked distinguishes the two) — set once,
+  // not per frame, since it needs no state beyond what deck.gl's own
+  // picking result (`info.object`) already carries.
+  function handleVehicleClick(info) {
+    if (!info.picked || !info.object) {
+      releaseFollow(); // U17 step 3: clicking empty space releases
+      return;
+    }
+    if (info.layer?.id === 'glow-halo') {
+      const t = info.object.t;
+      followVehicle('train', t.id, `${t.line.toUpperCase()} LINE · RUN ${trailingId(t.id)}`);
+    } else if (info.layer?.id === 'bus-capsules') {
+      const b = info.object;
+      followVehicle('bus', b.id, `ROUTE ${b.rt}`);
+    } else if (info.layer?.id === 'car-bodies') {
+      followVehicle('car', info.object.id, 'CAR');
+    } else {
+      releaseFollow();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') releaseFollow(); // U17 step 3
+  });
+
+  // U17 step 1/8: pickable is opt-in per layer (src/layers.js) — trains,
+  // buses, cars only, not the basemap/tracks/stations — so this one
+  // overlay-level onClick is all picking costs, bounded to those layers.
+  overlay.setProps({ onClick: handleVehicleClick });
 
   // U16 (R13, KTD11): the single place that owns entering either mode.
   // Always stop() + clear() before (re-)seeding/starting — idempotent and
@@ -354,6 +411,20 @@ async function boot() {
     // .contains([lon,lat]) works, and map.getBounds() already does (same
     // duck-typed use hud.js's own cachedBounds.contains() makes).
     const cars = carEngine ? carEngine.tick(now(), map.getBounds()) : [];
+
+    // U17 step 2/3: recenters on the followed vehicle's *this-frame*
+    // position, preserving zoom/pitch/bearing (setCenter touches only
+    // center) — and releases cleanly the instant that vehicle isn't in this
+    // frame's list at all, which covers both "stale/removed" and "a mode
+    // switch cleared it" with the same one check, since either way it's
+    // just absent now.
+    if (followed) {
+      const list = followed.kind === 'train' ? trains : followed.kind === 'bus' ? buses : cars;
+      const vehicle = list.find((v) => v.id === followed.id);
+      if (vehicle?.pos) map.setCenter(vehicle.pos);
+      else releaseFollow();
+    }
+
     hud.tick(trains);
     const center = map.getCenter();
     const currentTime = now();

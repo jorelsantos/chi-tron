@@ -76,6 +76,7 @@ export function createHud({
   getStatus,
   mode = 'explore',
   onModeChange,
+  onReleaseFollow,
 }) {
   const lineRowsEl = document.getElementById('line-rows');
   const displayRowsEl = document.getElementById('display-rows');
@@ -227,6 +228,11 @@ export function createHud({
   // sticky highlight would misreport the camera the instant the user pans
   // away (R7).
   function flyToPreset(btn, preset) {
+    // U17 step 5: a camera preset click releases follow mode first — R7's
+    // "camera stays put" is overridden by follow, but a preset is an even
+    // more explicit "take me somewhere specific" than free panning is, so
+    // it wins over an active follow outright rather than fighting it.
+    onReleaseFollow?.();
     btn.classList.add('is-flying');
     // Call flyTo BEFORE registering this button's listener. Interrupting an
     // in-flight ease fires 'moveend' synchronously, inside this same call,
@@ -296,6 +302,26 @@ export function createHud({
     }
   }
 
+  // ---- Follow indicator (U17, R14) ---------------------------------------
+
+  const followIndicatorEl = document.getElementById('follow-indicator');
+  const followLabelEl = document.getElementById('follow-label');
+  document.getElementById('follow-release')?.addEventListener('click', () => onReleaseFollow?.());
+
+  /** Shows/updates the indicator with `label` (e.g. "RED LINE · RUN 042"),
+   * or hides it entirely when `label` is null/undefined — main.js calls
+   * this once at pick time and once on release, not every frame (the
+   * displayed text doesn't change frame-to-frame). */
+  function setFollowLabel(label) {
+    if (!followIndicatorEl) return;
+    if (label) {
+      followLabelEl.textContent = label;
+      followIndicatorEl.classList.add('visible');
+    } else {
+      followIndicatorEl.classList.remove('visible');
+    }
+  }
+
   // ---- Compass ------------------------------------------------------------
 
   function updateCompass() {
@@ -353,5 +379,13 @@ export function createHud({
 
   refreshSystemStatus(); // empty state until the first alerts poll resolves
 
-  return { tick, applyLineFilters, setBuildingsVisible, refreshSystemStatus, setMode, flashFallbackNote };
+  return {
+    tick,
+    applyLineFilters,
+    setBuildingsVisible,
+    refreshSystemStatus,
+    setMode,
+    flashFallbackNote,
+    setFollowLabel,
+  };
 }

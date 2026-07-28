@@ -61,6 +61,34 @@
       font-size: 9px; letter-spacing: 0.14em; color: rgba(140, 160, 200, 0.4);
     }
 
+    /* U17 (R14): click-to-follow HUD indicator — top-center, out of the
+       way of the sidebar (left) and telemetry/compass stack (right).
+       Hidden entirely (not just empty) when nothing is followed, so it
+       never sits as a dead label. Unlike other .hud elements this one is
+       interactive (the release button), so pointer-events is switched back
+       on for it specifically. */
+    #follow-indicator {
+      top: 18px; left: 50%; transform: translateX(-50%);
+      display: none; align-items: center; gap: 10px;
+      padding: 8px 14px; pointer-events: auto;
+      background: linear-gradient(160deg, rgba(6, 9, 18, 0.78), rgba(4, 6, 13, 0.6));
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 212, 255, 0.35); border-radius: 8px;
+      font-size: 11px; letter-spacing: 0.14em; color: #cfe0ff;
+    }
+    #follow-indicator.visible { display: flex; }
+    #follow-indicator .follow-tag {
+      color: var(--neon-cyan); font-weight: 700;
+      text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
+    }
+    #follow-release {
+      border: 1px solid rgba(160, 190, 255, 0.3); border-radius: 4px;
+      padding: 3px 8px; background: rgba(255, 255, 255, 0.06);
+      color: var(--hud-dim); font-family: inherit; font-size: 9px;
+      letter-spacing: 0.14em; cursor: pointer;
+    }
+    #follow-release:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+
     /* U12: top-right telemetry stack, below clock/status/fps, and the
        compass beneath it. Same right-edge alignment and .hud typography as
        the existing corner elements. */
@@ -286,6 +314,13 @@
       </div>
       <div id="status-rows" role="status" aria-live="polite"></div>
     </div>
+  </div>
+
+  <!-- U17 (R14): click-to-follow indicator. Content/visibility owned by src/hud.js. -->
+  <div class="hud" id="follow-indicator">
+    <span class="follow-tag">FOLLOWING</span>
+    <span id="follow-label"></span>
+    <button id="follow-release" type="button">RELEASE (ESC)</button>
   </div>
 
   <!-- U12: top-right telemetry (live in-viewport train count) + compass. -->

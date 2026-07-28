@@ -194,6 +194,20 @@ describe('buildLayers line stress and accessibility glyph (U15)', () => {
   });
 });
 
+describe('buildLayers picking scope (U17)', () => {
+  it('enables pickable on exactly the three vehicle layers, not the basemap-adjacent ones', () => {
+    const layers = buildLayers([], 0, new Set(['Red']), {});
+    const pickableIds = ['glow-halo', 'bus-capsules', 'car-bodies'];
+    const notPickableIds = ['trails', 'bus-trails', 'glow-mid', 'glow-core', 'station-halo', 'station-ring'];
+    for (const id of pickableIds) {
+      expect(layerById(layers, id).props.pickable).toBe(true);
+    }
+    for (const id of notPickableIds) {
+      expect(layerById(layers, id).props.pickable).not.toBe(true);
+    }
+  });
+});
+
 describe('buildLayers car layer (U11)', () => {
   const visibleLines = new Set(['Red']);
   const cars = [{ pos: [-87.6, 41.9], heading: 90 }];
