@@ -3,8 +3,13 @@
 // cannot tell live from mock.
 
 import { prepareLine, snapToLine, pointAtDist } from './tracks.js';
+import { Poller, DEFAULT_DAILY_CEILING } from './poller.js';
 
 const POLL_MS = 5000;
+// U14: this feed's ledger namespace (keyed off CTA_KEY, the real Train
+// Tracker key) — distinct from whatever storageKey the bus feed uses later
+// in this Phase B pass, so their daily ceilings never share one counter.
+const TRAIN_LEDGER_KEY = 'cta-train';
 const STALE_POLLS = 2; // absent this many polls → stale → removed
 const TRAIL_SECONDS = 60; // history kept per train
 const ROUTES = ['red', 'blue', 'brn', 'g', 'org', 'p', 'pink', 'y'];
@@ -131,31 +136,50 @@ export class TrainEngine {
 
   // ---- live mode ----------------------------------------------------------
 
+  // U14: polling mechanics (visibility gate, single-flight, backoff, daily
+  // ledger/ceiling) now live entirely in src/poller.js's Poller — this
+  // engine only supplies what to fetch and how to ingest it. Built lazily
+  // here rather than in the constructor so mock mode (seedMock(), which
+  // never calls startLive()) never instantiates a Poller at all: no timer,
+  // no visibilitychange listener, no localStorage touch.
   startLive() {
-    const poll = async () => {
-      try {
-        const res = await fetch(
-          `/api/tt?rt=${ROUTES.join(',')}&outputType=JSON`
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        this.#ingest(data);
-        this.failures = 0;
-        this.onStatus('live');
-      } catch (err) {
-        console.warn('[chi-tron] poll failed:', err.message);
-        this.failures = (this.failures || 0) + 1;
-        this.onStatus(this.failures > 2 ? 'lost' : 'live');
-      }
-      // exponential backoff on repeated failure, capped at 60s
-      const delay = POLL_MS * Math.min(12, 2 ** (this.failures || 0));
-      this.timer = setTimeout(poll, delay);
-    };
-    poll();
+    this.poller = new Poller({
+      storageKey: TRAIN_LEDGER_KEY,
+      intervalMs: POLL_MS,
+      ceiling: DEFAULT_DAILY_CEILING,
+      fetchFn: () => this.#pollOnce(),
+      onStatus: (status, err) => this.#handlePollStatus(status, err),
+    });
+    this.poller.start();
   }
 
   stop() {
-    clearTimeout(this.timer);
+    this.poller?.stop();
+  }
+
+  async #pollOnce() {
+    const res = await fetch(`/api/tt?rt=${ROUTES.join(',')}&outputType=JSON`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    this.#ingest(data);
+  }
+
+  // Translates the governor's low-level 'ok'/'error'/'hold' outcomes into
+  // this engine's existing 'live'/'lost'/'hold' HUD states, preserving the
+  // pre-U14 hysteresis exactly: a single failed poll still reads as 'live'
+  // (transient blips shouldn't flip the HUD), only 3+ consecutive failures
+  // read as 'lost'.
+  #handlePollStatus(status, err) {
+    if (status === 'ok') {
+      this.failures = 0;
+      this.onStatus('live');
+    } else if (status === 'error') {
+      console.warn('[chi-tron] poll failed:', err.message);
+      this.failures = (this.failures || 0) + 1;
+      this.onStatus(this.failures > 2 ? 'lost' : 'live');
+    } else if (status === 'hold') {
+      this.onStatus('hold');
+    }
   }
 
   #ingest(data) {

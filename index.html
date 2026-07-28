@@ -36,6 +36,10 @@
     }
     #status.live { color: #3bff6f; text-shadow: 0 0 6px rgba(59, 255, 111, 0.6); }
     #status.lost { color: #ff3b4e; text-shadow: 0 0 6px rgba(255, 59, 78, 0.6); }
+    /* U14: BUDGET HOLD — the poll governor hit its self-imposed daily
+       ceiling (R10) and stopped issuing requests. Amber so it reads as a
+       deliberate, safe stop rather than the failure states green/red imply. */
+    #status.hold { color: #ffb020; text-shadow: 0 0 6px rgba(255, 176, 32, 0.6); }
     #fps {
       top: 66px; right: 24px;
       font-size: 10px; letter-spacing: 0.2em; color: rgba(140, 160, 200, 0.5);

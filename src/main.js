@@ -15,9 +15,18 @@ let feedStatus = 'boot'; // read by hud.js's tick() to render the em-dash no-dat
 
 function setStatus(state) {
   feedStatus = state;
-  statusEl.className = `hud ${state === 'lost' ? 'lost' : 'live'}`;
+  // U14: 'hold' is the poll governor's BUDGET HOLD state (src/poller.js) —
+  // the feed hit its self-imposed daily ceiling (R10) and has stopped
+  // issuing requests until the ledger's local date rolls over.
+  statusEl.className = `hud ${state === 'lost' ? 'lost' : state === 'hold' ? 'hold' : 'live'}`;
   statusEl.textContent =
-    state === 'mock' ? 'SIM MODE' : state === 'lost' ? 'SIGNAL LOST' : 'LIVE FEED';
+    state === 'mock'
+      ? 'SIM MODE'
+      : state === 'lost'
+        ? 'SIGNAL LOST'
+        : state === 'hold'
+          ? 'BUDGET HOLD'
+          : 'LIVE FEED';
 }
 
 setInterval(() => {
