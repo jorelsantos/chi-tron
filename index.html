@@ -41,8 +41,116 @@
       font-size: 10px; letter-spacing: 0.2em; color: rgba(140, 160, 200, 0.5);
     }
     #disclaimer {
-      bottom: 12px; left: 22px;
+      bottom: 12px; left: 50%; transform: translateX(-50%); text-align: center;
       font-size: 9px; letter-spacing: 0.14em; color: rgba(140, 160, 200, 0.4);
+    }
+
+    /* U12: top-right telemetry stack, below clock/status/fps, and the
+       compass beneath it. Same right-edge alignment and .hud typography as
+       the existing corner elements. */
+    #telemetry {
+      top: 92px; right: 24px; text-align: right;
+    }
+    #telemetry .telemetry-label {
+      display: block; font-size: 9px; letter-spacing: 0.28em;
+      color: var(--hud-dim);
+    }
+    #telemetry .telemetry-count {
+      display: block; margin-top: 3px; font-size: 16px; letter-spacing: 0.1em;
+      color: var(--neon-cyan);
+      text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
+    }
+    #compass {
+      top: 138px; right: 24px; width: 34px; height: 34px;
+    }
+    #compass svg { width: 100%; height: 100%; display: block; overflow: visible; }
+    #compass circle {
+      fill: rgba(5, 8, 16, 0.4); stroke: var(--hud-dim); stroke-width: 1;
+    }
+    #compass-rose {
+      transform-origin: 20px 20px; transition: transform 0.08s linear;
+    }
+    #compass-rose path { fill: var(--neon-cyan); }
+    #compass-rose text {
+      fill: var(--hud-dim); font-size: 7px; text-anchor: middle;
+      font-family: "SF Mono", "Menlo", monospace;
+    }
+
+    /* U12: instrument sidebar — glass panel, docks left below the wordmark.
+       Unlike other .hud elements this one is interactive, so pointer-events
+       is switched back on for the panel and (by inheritance) its buttons. */
+    #sidebar {
+      top: 78px; left: 16px; bottom: 16px; width: 300px;
+      pointer-events: auto;
+      display: flex; flex-direction: column; gap: 20px;
+      padding: 16px 14px;
+      overflow-y: auto;
+      background: linear-gradient(160deg, rgba(6, 9, 18, 0.72), rgba(4, 6, 13, 0.5));
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 212, 255, 0.22);
+      border-radius: 10px;
+      box-shadow: 0 0 30px rgba(0, 212, 255, 0.05) inset, 0 8px 30px rgba(0, 0, 0, 0.5);
+    }
+    #sidebar::-webkit-scrollbar { width: 6px; }
+    #sidebar::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.25); border-radius: 3px; }
+
+    .panel-header {
+      display: flex; align-items: baseline; justify-content: space-between;
+      margin-bottom: 8px; padding-bottom: 6px;
+      border-bottom: 1px solid rgba(160, 190, 255, 0.15);
+    }
+    .panel-title {
+      font-size: 11px; letter-spacing: 0.3em; color: var(--neon-cyan);
+      text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
+    }
+    .panel-scope {
+      font-size: 8px; letter-spacing: 0.22em; color: var(--hud-dim);
+    }
+    #line-rows, #display-rows {
+      display: flex; flex-direction: column; gap: 4px;
+    }
+
+    /* Shared row-button look: near-opaque scrim so legibility never depends
+       on what the map draws underneath (glass recipe, R6). */
+    .line-row, .toggle-row {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; border: 1px solid transparent; border-radius: 5px;
+      padding: 6px 8px;
+      background: rgba(5, 8, 17, 0.55);
+      color: #cfe0ff; font-family: inherit; font-size: 12px; letter-spacing: 0.04em;
+      text-align: left; cursor: pointer;
+      transition: background 0.15s, opacity 0.15s, border-color 0.15s;
+    }
+    .line-row:hover, .toggle-row:hover { background: rgba(5, 8, 17, 0.8); }
+    .line-row .row-name, .toggle-row .row-name { flex: 1 1 auto; }
+    .line-row .row-count {
+      min-width: 26px; text-align: right; font-weight: 600; color: #fff;
+    }
+    .line-row .badge {
+      width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto;
+      background: var(--line-color); box-shadow: 0 0 6px var(--line-color);
+    }
+    .line-row[aria-pressed="false"] { opacity: 0.45; }
+    .line-row[aria-pressed="false"] .row-count { color: var(--hud-dim); }
+    .line-row[aria-pressed="false"] .badge {
+      background: transparent; box-shadow: inset 0 0 0 2px var(--line-color);
+    }
+
+    .toggle-row .dot {
+      width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto;
+      background: var(--neon-cyan); box-shadow: 0 0 6px var(--neon-cyan);
+    }
+    .toggle-row[aria-pressed="false"] { opacity: 0.45; }
+    .toggle-row[aria-pressed="false"] .dot {
+      background: transparent; box-shadow: inset 0 0 0 2px var(--hud-dim);
+    }
+
+    #sidebar button:focus-visible,
+    .hud button:focus-visible {
+      outline: 2px solid var(--neon-cyan);
+      outline-offset: 2px;
+      box-shadow: 0 0 10px rgba(0, 212, 255, 0.7);
     }
 
     /* CRT overlays */
@@ -69,6 +177,40 @@
   <div class="hud" id="clock">--:--:--</div>
   <div class="hud" id="status">BOOT</div>
   <div class="hud" id="fps">-- FPS</div>
+
+  <!-- U12: instrument sidebar. Row content (line rows + display toggles) is
+       built by src/hud.js — this is just the docked glass shell. -->
+  <div class="hud" id="sidebar">
+    <div class="panel-section">
+      <div class="panel-header">
+        <span class="panel-title">LINES</span>
+        <span class="panel-scope">IN SERVICE</span>
+      </div>
+      <div id="line-rows" role="group" aria-label="L line visibility toggles"></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">
+        <span class="panel-title">DISPLAY</span>
+      </div>
+      <div id="display-rows" role="group" aria-label="Display layer toggles"></div>
+    </div>
+  </div>
+
+  <!-- U12: top-right telemetry (live in-viewport train count) + compass. -->
+  <div class="hud" id="telemetry">
+    <span class="telemetry-label">TRAINS &middot; IN VIEW</span>
+    <span class="telemetry-count" id="telemetry-count">--</span>
+  </div>
+  <div class="hud" id="compass" aria-hidden="true">
+    <svg viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="18" />
+      <g id="compass-rose">
+        <path d="M20 5 L23.5 20 L20 35 L16.5 20 Z" />
+        <text x="20" y="9">N</text>
+      </g>
+    </svg>
+  </div>
+
   <div class="hud" id="disclaimer">UNOFFICIAL FAN PROJECT — NOT AFFILIATED WITH CTA</div>
   <script type="module" src="/src/main.js"></script>
 </body>

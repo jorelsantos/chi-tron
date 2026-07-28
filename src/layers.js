@@ -68,19 +68,24 @@ export function buildLayers(
   currentTime,
   visibleLines,
   trailVersion = 0,
-  stations = {}
+  stations = {},
+  display = { trains: true, stations: true }
 ) {
-  const shown = trains.filter(
-    (t) => t.pos && visibleLines.has(t.line) && t.state !== 'removed'
-  );
+  // U12's DISPLAY toggles: `trains`/`stations` off means "don't draw this
+  // layer at all," independent of the per-line `visibleLines` Set below.
+  // Empty arrays keep the layer objects themselves stable (same layer
+  // count every frame) rather than conditionally omitting them.
+  const shown = display.trains
+    ? trains.filter((t) => t.pos && visibleLines.has(t.line) && t.state !== 'removed')
+    : [];
   // Computed once per frame per train (not once per accessor call) — three
   // glow-head layers each read this, and the pulse math is cheap but no
   // reason to triple it up.
   const styles = new Map(shown.map((t) => [t, trainStyle(t, currentTime)]));
 
-  const shownStations = Object.values(stations).filter((s) =>
-    s.lines.some((l) => visibleLines.has(l))
-  );
+  const shownStations = display.stations
+    ? Object.values(stations).filter((s) => s.lines.some((l) => visibleLines.has(l)))
+    : [];
 
   return [
     new TripsLayer({

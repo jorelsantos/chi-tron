@@ -4,13 +4,17 @@ import { MapboxOverlay } from '@deck.gl/mapbox';
 import { DARK_CITY_STYLE, FALLBACK_STYLE, LOOP_PRESET } from './style.js';
 import { TrainEngine, now } from './trains.js';
 import { buildLayers, LINE_COLORS } from './layers.js';
+import { createHud } from './hud.js';
 
 const MOCK = new URLSearchParams(location.search).has('mock');
 const statusEl = document.getElementById('status');
 const clockEl = document.getElementById('clock');
 const fpsEl = document.getElementById('fps');
 
+let feedStatus = 'boot'; // read by hud.js's tick() to render the em-dash no-data state
+
 function setStatus(state) {
+  feedStatus = state;
   statusEl.className = `hud ${state === 'lost' ? 'lost' : 'live'}`;
   statusEl.textContent =
     state === 'mock' ? 'SIM MODE' : state === 'lost' ? 'SIGNAL LOST' : 'LIVE FEED';
@@ -148,6 +152,23 @@ async function boot() {
   const engine = new TrainEngine(tracks);
   engine.onStatus = setStatus;
   const visibleLines = new Set(Object.keys(tracks));
+  // U12's DISPLAY toggles — buildLayers() reads trains/stations; buildings
+  // isn't part of the deck.gl stack so hud.js applies it straight to the
+  // MapLibre style instead of routing it through this object.
+  const display = { trains: true, buildings: true, stations: true };
+
+  // U12: instrument sidebar + telemetry/compass chrome. Owns the LINES and
+  // DISPLAY toggle DOM; mutates `visibleLines` and `display` in place so
+  // this frame loop's existing buildLayers() call picks up changes with no
+  // further wiring.
+  const hud = createHud({
+    map,
+    lineColors: LINE_COLORS,
+    visibleLines,
+    display,
+    trackGlowLayerIds: TRACK_GLOW_LAYER_IDS,
+    getStatus: () => feedStatus,
+  });
 
   if (MOCK) {
     engine.seedMock(4);
@@ -180,8 +201,9 @@ async function boot() {
     }
 
     const trains = engine.tick();
+    hud.tick(trains);
     overlay.setProps({
-      layers: buildLayers(trains, now(), visibleLines, engine.trailVersion, stations),
+      layers: buildLayers(trains, now(), visibleLines, engine.trailVersion, stations, display),
     });
     requestAnimationFrame(frame);
   }
@@ -190,6 +212,7 @@ async function boot() {
   // debug handles (harmless in prod, invaluable in dev)
   window.__map = map;
   window.__engine = engine;
+  window.__hud = hud;
 }
 
 boot();
