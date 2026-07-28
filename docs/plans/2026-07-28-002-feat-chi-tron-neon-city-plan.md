@@ -16,7 +16,7 @@ origin: docs/plans/2026-07-28-001-feat-chi-tron-mvp-plan.md
 
 ## Summary
 
-Turn the working MVP into a bustling cyberpunk metropolis. Two phases: **Phase A** delivers the look (dramatic near-black buildings, hairline neon lines with bloom, ridership-weighted station nodes, the instrument sidebar, the hero Loop camera) so the aesthetic payoff lands before the heavy work. **Phase B** adds the life (polling safety, buses, ambient street traffic, and service disruptions rendered as light). Visual quality outranks data fidelity throughout.
+Turn the working MVP into a bustling cyberpunk metropolis with two ways to see it: **EXPLORE** (default — everything simulated, always beautiful, no network) and **LIVE** (real trains and buses). **Phase A** delivers the look — dramatic near-black buildings, hairline neon lines with bloom, ridership-weighted station nodes, the instrument sidebar, the hero Loop camera — so the aesthetic payoff lands before the heavy work. **Phase B** adds the life: polling safety, live buses, ambient street traffic, the mode toggle, click-to-follow camera, and service disruptions rendered as light. Visual quality outranks data fidelity throughout.
 
 ## Problem Frame
 
@@ -33,7 +33,7 @@ The reference runs a *simulated timetable*, not a live feed, which confirms that
 - **R1** — 3D buildings read as a dramatic dark skyline: exaggerated heights, near-black bodies, neon-tinted top light. Buildings never compete with transit for attention.
 - **R2** — Transit lines adopt the reference's treatment: hairline bright core plus wide soft bloom halo, in vibrant saturated colors on near-black, and all eight remain mutually distinguishable.
 - **R3** — Trains read as Tron light-cycles: hot white core, sharp neon trail, additive brightening where trails cross. Delay and approach state are visible.
-- **R4** — CTA buses render live in a neutral color, visibly subordinate to trains and visually distinct from cars.
+- **R4** — CTA buses render with a glowing trail like trains, but in a distinct shape and cool-toned color so trains, buses and cars are never confused at a glance.
 - **R5** — Ambient car traffic moves along real downtown streets and holds at intersections on a signal cycle that produces visible waves. Plausible, not accurate.
 - **R6** — Instrument sidebar: glass panel, one row per L line with badge, name and live count; display toggles; camera presets.
 - **R7** — A camera preset flies to a dramatic angle on the Loop. Camera is otherwise static — no idle orbit; manual pan/zoom/rotate always retained.
@@ -42,12 +42,19 @@ The reference runs a *simulated timetable*, not a live feed, which confirms that
 - **R10** — **API usage stays demonstrably safe**: never exceed a self-imposed fraction of CTA's 100,000/day/key limit, never burst hard enough to trip their per-IP DoS protection, and never poll while the tab is hidden.
 - **R11** — Station nodes punctuate every line, with brightness scaled by real ridership so the Loop blazes and outlying stops read as embers.
 - **R12** — Live service disruption is rendered as light: a line under planned work or an active incident is visibly stressed rather than reported only in text.
+- **R13** — A single toggle switches between **EXPLORE** (default; all vehicles simulated, no key or network dependency) and **LIVE** (real trains and buses; cars remain simulated since no live car feed exists). Switching is instant and always available.
+- **R14** — Clicking any vehicle — train, bus, or car, in either mode — enters follow mode: the camera locks onto and tracks it every frame. Clicking empty space or pressing Esc releases back to free camera.
 
 ### Scope Boundaries
 
-**Deferred to follow-up work:** vertical track profile (elevated Loop vs. State/Dearborn subway) with elevation ruler and depth-exaggeration slider — Jojo chose flat for this pass, but it is the highest-value follow-up since it carries much of the reference's impact; GTFS-timetable simulated service with speed multipliers (×1…×480) as a no-live-feed fallback and time-travel mode; click-a-train follow mode; station and street name labels (needs its own unit specifying type size, halo and minzoom); deploy; Metra/Divvy/flight layers; sound.
+**Deferred to follow-up work:**
+- **Station and street name labels** — deliberately deferred so this pass can focus on movement, animation and color. Named as the direct follow-up because it *completes* follow mode (R14): tracking a train is far better when you can read where it is and where it's going. Needs its own unit specifying type size, halo treatment and minzoom.
+- **Real Chicago building geometry** — this pass exaggerates OpenFreeMap's generic extrusions; a later pass could swap in accurate per-building footprints and heights for the actual skyline. Candidate free sources to investigate: the City of Chicago data portal's building footprints dataset (which carries stories and height fields), and OSM `building:levels` / `height` tags where present. Not scoped here because the styling work in U7 is what makes the skyline read, and it holds regardless of whose geometry is underneath.
+- Vertical track profile (elevated Loop vs. State/Dearborn subway) with elevation ruler and depth-exaggeration slider — Jojo chose flat for this pass, but it carries much of the reference's impact.
+- GTFS-timetable simulated service with speed multipliers (×1…×480) — would upgrade EXPLORE mode from plausible motion to real schedule-accurate motion, plus time travel.
+- Hover tooltips / per-vehicle detail panels (distinct from R14's click-to-follow, which is in scope); deploy; Metra/Divvy/flight layers; sound.
 
-**Out of scope:** accuracy guarantees on any feed; mobile layout; historical playback; **vehicle interactivity** — all deck.gl vehicle layers stay `pickable: false` this pass, no hover tooltips or click selection.
+**Out of scope:** accuracy guarantees on any feed; mobile layout; historical playback.
 
 ---
 
@@ -57,10 +64,12 @@ The reference runs a *simulated timetable*, not a live feed, which confirms that
 - **KTD2 — Cars are "not subtle, not loud."** *(session-settled: user-directed.)* Interpreted as: clearly visible motion at Loop zoom, rendered as light rather than vehicles. Governs R5.
 - **KTD3 — Flat this pass.** *(session-settled: user-directed — chosen over making elevation a feature; effort goes to buildings, buses, cars and lighting instead.)* Governs the Scope Boundaries deferral.
 - **KTD4 — Buses position by `pdist`, not snapping.** `getvehicles` returns each bus's `pdist` (feet along its pattern) and `pid`; `getpatterns` returns that pattern's polyline with per-point `pdist`. Direct interpolation, strictly better than the trains' snap-to-nearest approach. Verified live 2026-07-28.
-- **KTD5 — Bus route subset on API v3.** `getvehicles` caps at **10 routes per call** (documented and verified). Ship ~20 marquee high-frequency routes = 2 calls per poll. Use the **v3** base (`https://www.ctabustracker.com/bustime/api/v3/`) — the 2025-04-21 guide documents v3; v2 still answers but is not current. Live buses (rather than simulating them from `patterns.json` as we do cars) are worth the second key because `dly` and real bunching produce clustering no simulation would invent, and it is the only feed that shows the street network in use.
+- **KTD5 — Bus route subset on API v3, live.** `getvehicles` caps at **10 routes per call** (documented and verified). Ship ~20 marquee high-frequency routes = 2 calls per poll. Use the **v3** base (`https://www.ctabustracker.com/bustime/api/v3/`) — the 2025-04-21 guide documents v3; v2 still answers but is not current. *(session-settled: user-directed — keep buses live, chosen over simulating them from `patterns.json`: real bunching and the `dly` flag produce clustering no simulation would invent, and LIVE mode is meant to be genuinely live.)* The simulated bus path still gets built, but as EXPLORE mode's renderer (KTD11), not as a replacement.
+- **KTD11 — Two modes, one switch: EXPLORE (default) and LIVE.** *(session-settled: user-directed — chosen over a mode-less always-live map.)* EXPLORE simulates every vehicle from baked geometry, so it needs no key, no network, and can never look broken or empty — which is why it is the **default**: the map is beautiful the instant it loads, and LIVE becomes a deliberate "show me the real city" click. LIVE runs real trains and real buses; cars stay simulated in both modes because no live car feed exists. Architecturally this is cheap: today's `?mock=1` becomes a first-class HUD toggle rather than a debug flag, and every engine already produces one shared state shape so the render layers cannot tell the difference. Governs R13.
+- **KTD12 — Vehicle identity: shape first, then temperature.** All three kinds get glowing trails (Jojo's call — buses are not second-class), so shape and color temperature carry the distinction instead of presence-of-glow. **Trains:** saturated neon in their line color, hot-white core, longest trail. **Buses:** elongated capsule, cool ice-blue/silver, shorter trail, dimmer core — cool against the trains' saturated warmth, and a capsule against their round core. **Cars:** amber headlight and red taillight dot-pairs, no capsule, shortest trail. Shape distinguishes at any distance, before color even registers. Governs R4, R5, and the U9 legibility hierarchy.
 - **KTD6 — Bake the ambient road graph at build time via Overpass.** A downtown bbox of OSM centerlines becomes `public/data/roads.json`, same pattern as `tracks.json`. Chosen over client-side vector-tile querying, which only sees loaded tiles, returns tile-clipped geometry, and makes car behavior depend on camera position.
 - **KTD7 — Glow is a gated decision, not an assumption.** Start with layered additive geometry (stacked wide-translucent / narrow-bright passes). U8 gates on a side-by-side against the reference; **if it fails, the escape path is real bloom** — move transit-line rendering out of the MapLibre style into deck.gl, add `@luma.gl/effects`, and apply a `PostProcessEffect` bloom pass inside U8. Two constraints found during review: `PostProcessEffect` ships in the installed `@deck.gl/core` 9.3.7 but `@luma.gl/effects` is **not installed**, and the overlay currently runs `interleaved: false`, so a bloom pass would not touch MapLibre-drawn layers. Whichever path ships gets recorded in the session notes.
-- **KTD8 — Render budget with a numeric floor and a degradation ladder.** Floor: **sustained 30 fps at the Loop framing with all layers on**, measured on Jojo's machine in the browser preview via the FPS meter U7 adds. A unit that misses the floor is not done. Apply in order until it passes: lower the car cap → lower the bus cap → drop the third line-glow pass → raise the building-extrusion minzoom → reduce the bus route subset. Standing mechanisms: **both** cars and buses capped and viewport-culled, buses single-pass (no glow stack), extrusions minzoom-gated. Realistic load to budget against: ~300 cars and **400–700 buses** — the ~20 marquee routes are the high-frequency ones, so at CTA's ~1,800 peak vehicles across 126 routes the subset lands well above a naive per-route average.
+- **KTD8 — Render budget with a numeric floor and a degradation ladder.** Floor: **sustained 30 fps at the Loop framing with all layers on**, measured on Jojo's machine in the browser preview via the FPS meter U7 adds. A unit that misses the floor is not done. Apply in order until it passes: lower the car cap → lower the bus cap → shorten the bus trail → drop the third line-glow pass → raise the building-extrusion minzoom → reduce the bus route subset. Standing mechanisms: **both** cars and buses capped and viewport-culled, extrusions minzoom-gated, and picking (R14) enabled only on vehicle layers rather than globally. Realistic load to budget against: ~300 cars and **400–700 buses** — the ~20 marquee routes are the high-frequency ones, so at CTA's ~1,800 peak vehicles across 126 routes the subset lands well above a naive per-route average. Note that KTD12 gives buses trails, which costs more than the single-pass sprite originally budgeted — the bus cap and trail length are the two levers that absorb it.
 - **KTD9 — Signal phases come from position, not a hash.** A coordinate hash decorrelates neighbouring intersections by construction, producing flicker rather than the green waves R5 promises. Bake each node's phase as a linear function of its position along the dominant street axis, so consecutive intersections on a corridor get progressive offsets — still stateless at runtime, still baked at build time.
 - **KTD10 — Self-imposed API ceiling well under CTA's.** CTA allows 100,000 requests/day per key (both Train and Bus Tracker, confirmed in both developer guides) and runs per-IP DoS protection that can time out a noisy client. Target **≤25,000/day/key** — roughly 25% of the allowance — enforced by a client-side ledger that hard-stops polling at the ceiling. Governs R10.
 
@@ -96,22 +105,33 @@ flowchart TB
         BG --> AL[alerts + route status 120s<br/>no key]
     end
     subgraph client
+        MODE{{"MODE · EXPLORE default | LIVE"}}
+        MODE -->|LIVE| TT
+        MODE -->|LIVE| BV
+        MODE -->|EXPLORE| SIM[simulated trains + buses<br/>walk baked geometry]
         TT --> EN[vehicle engines]
         BV --> EN
+        SIM --> EN
         PJ --> EN
+        PJ --> SIM
         TJ --> EN
-        RJ --> CS[car sim<br/>graph walk · signal gate]
+        TJ --> SIM
+        RJ --> CS[car sim · both modes<br/>graph walk · signal gate]
         EN --> VC[["vehicle state<br/>pos · heading · trail · kind · flags"]]
         CS --> VC
         VC --> L[render layers]
+        VC --> FM[follow camera<br/>picked vehicle]
         AL --> SS[service status → line stress]
         SJ --> L
         SS --> L
         ST[dark city style<br/>exaggerated extrusions] --> M[MapLibre]
         L --> M
-        HUD[glass sidebar · telemetry · presets] --> M
+        FM --> M
+        HUD[glass sidebar · telemetry · presets · mode] --> M
     end
 ```
+
+Cars are simulated in **both** modes — no live car feed exists — so the mode switch only re-sources trains and buses. Because every producer emits the same vehicle-state shape, the render layers, follow camera and counts are mode-agnostic.
 
 **Poll governor** (R10, KTD10) — one place that owns every outbound request:
 
@@ -135,6 +155,8 @@ ledger: per-key count in localStorage, keyed by local date, reset at midnight
 ### Phase A — The Look
 
 Resequenced so the aesthetic payoff and the frame-budget baseline land before the two heaviest units. U12 no longer waits on buses or cars; their toggles are added by the units that create them.
+
+**Implementation priority within this pass** *(session-settled: user-directed)*: get **movement, animation and color** right first — that is the point of the pass. U7's building drama stays in scope (it is foundational to the dark stage everything else reads against), but if effort has to be traded, the neon/vehicle work in U8, U9 and U11 outranks further building refinement. Building *accuracy* — real Chicago geometry — is explicitly a later pass.
 
 ### U7. Dark city restyle, dramatic buildings, Loop framing
 
@@ -237,8 +259,8 @@ Resequenced so the aesthetic payoff and the frame-budget baseline land before th
 1. Add a `/api/bus` proxy route mirroring `/api/tt`, injecting `CTA_BUS_KEY` from `.env`, targeting the **v3** base (KTD5, R9).
 2. `build-patterns.mjs` fetches `getpatterns` once per marquee route into `patterns.json` — no runtime pattern calls.
 3. Poll `getvehicles` through the U14 governor in two 10-route calls every 15s (11,520/day — inside KTD10's ceiling); position each bus by interpolating its `pid` pattern at its reported `pdist` (KTD4); tween between polls like trains.
-4. Add a mock bus generator mirroring `TrainEngine.seedMock` / `#tickMock` — synthetic buses walking `patterns.json` at plausible speeds in the same state shape — so mock mode renders buses with no key and no network.
-5. Render per the legibility hierarchy: cars own amber (small dim headlight dots, red taillights); **buses are an elongated capsule at a stated minimum pixel size in a cool neutral off-white that matches no L line's hue**; trains keep the hot-white core plus neon trail. Single-pass, no glow stack (KTD8).
+4. Add a simulated bus generator mirroring `TrainEngine.seedMock` / `#tickMock` — synthetic buses walking `patterns.json` at plausible speeds in the same state shape. This is **EXPLORE mode's bus renderer** (KTD11, R13), not just a test fixture, so it needs to look good, not merely run.
+5. Render per KTD12: **buses are an elongated capsule in cool ice-blue/silver with its own glowing trail** — shorter and dimmer than the trains' — at a stated minimum pixel size, in a hue that matches no L line. Cars stay amber dot-pairs, trains stay saturated line-color with the longest trail. The capsule shape is what carries the distinction at distance, so it must remain visibly elongated at the Loop framing, not collapse to a dot.
 6. **Cap the rendered bus count** (KTD8), dropping the furthest-from-viewport-center vehicles beyond the cap. Unlike cars, bus count is whatever CTA returns, so without a cap the layer with no ceiling is the one carrying the top risk.
 7. **Load `patterns.json` in a guarded fetch** that warns and disables only the bus subsystem on failure. `boot()` in `src/main.js` currently `await`s `tracks.json` with no `.catch`, so an unguarded second required file would black-screen the whole app — including mock mode — for anyone who has not run the build script.
 8. **Give the bus feed its own status state**, with backoff mirroring `TrainEngine.startLive`. A missing `CTA_BUS_KEY` would otherwise proxy `key=undefined`, return non-200, and leave the HUD reading `LIVE FEED` with silently absent buses.
@@ -297,6 +319,50 @@ Resequenced so the aesthetic payoff and the frame-budget baseline land before th
 - A missing `roads.json` disables cars with a warning while trains, buses and the map still render.
 **Verification:** at `LOOP_PRESET`, traffic visibly flows and pauses in waves; no dead-traffic boundary is visible at the `CITY` preset; frame rate meets KTD8's floor with cars enabled.
 
+### U16. EXPLORE / LIVE mode toggle
+
+**Goal:** One switch between the always-beautiful simulated city and the real one.
+**Requirements:** R13. **Dependencies:** U9, U12, U14.
+**Files:** `src/main.js`, `src/hud.js`, `src/trains.js`, `src/buses.js`, `index.html`.
+**Approach:**
+1. Promote the existing `?mock=1` flag into a runtime mode owned by one module — `EXPLORE` (default) or `LIVE` — replacing the boot-time branch in `src/main.js` that currently chooses `seedMock()` or `startLive()` once and never revisits it.
+2. Switching to LIVE starts the train and bus pollers through the U14 governor and clears simulated vehicles; switching to EXPLORE stops all polling and re-seeds simulated vehicles. Both directions must be clean — no stale vehicles from the previous mode, no orphaned timers.
+3. Render the toggle as a prominent two-state control (not buried in DISPLAY), since it is the app's primary mode affordance. Label the current state clearly; when LIVE cannot connect, fall back visibly to EXPLORE rather than showing an empty map.
+4. Keep `?mock=1` and add `?live=1` as URL overrides for the default, so deep links to either mode work.
+**Execution note:** the mode transition is where stale-state bugs live — test the switch in both directions, repeatedly, before considering it done.
+**Test scenarios:**
+- Default boot with no query param enters EXPLORE and issues zero network requests.
+- Switching EXPLORE → LIVE begins polling and removes every simulated vehicle.
+- Switching LIVE → EXPLORE stops all polling, clears live vehicles, and re-seeds simulated ones.
+- Rapidly toggling modes several times leaves exactly one active vehicle set and no duplicate timers.
+- `?live=1` boots directly into LIVE; `?mock=1` boots into EXPLORE.
+- A LIVE mode that cannot reach either feed surfaces the failure and does not present an empty map as success.
+- Follow mode (R14) survives a mode switch by releasing cleanly rather than tracking a vehicle that no longer exists.
+**Verification:** `read_network_requests` confirms zero traffic in EXPLORE and active polling in LIVE; toggling repeatedly shows stable vehicle counts.
+
+### U17. Click-to-follow camera
+
+**Goal:** Click any vehicle and ride along with it.
+**Requirements:** R14. **Dependencies:** U13, U16.
+**Files:** `src/layers.js`, `src/main.js`, `src/hud.js`.
+**Approach:**
+1. Enable `pickable` on the vehicle layers only (trains, buses, cars) — not the basemap, tracks or stations — to bound the picking cost (KTD8).
+2. On click, store the picked vehicle's stable id and kind. Each frame, recenter the camera on that vehicle's current interpolated position, preserving the user's current zoom, pitch and bearing so the framing stays theirs.
+3. Release on Esc, on clicking empty space, or when the followed vehicle disappears (a live run ending service, or a mode switch) — always returning to free camera rather than a frozen one.
+4. Show a small HUD indicator naming what is being followed (line and run number for trains, route for buses) plus the release affordance, mirroring the reference's labeled follow-mode hint.
+5. Follow mode overrides R7's "camera stays put" by explicit design; the two camera presets release follow when clicked.
+**Execution note:** this reverses the earlier `pickable: false` scope call — the reference treats follow mode as a named feature, and Jojo confirmed it is worth pinning in.
+**Test scenarios:**
+- Clicking a train enters follow mode and the camera tracks it across several frames.
+- Clicking a bus and a car each work the same way.
+- Esc releases follow mode and leaves the camera where it was, not snapped elsewhere.
+- Clicking empty map space releases follow mode.
+- A followed vehicle that vanishes (stale/removed, or a mode switch) releases follow mode without throwing or freezing the camera.
+- User zoom and rotate during follow mode are preserved rather than overridden each frame.
+- Clicking a camera preset while following releases follow mode first.
+- Picking is enabled on vehicle layers only, and the frame rate still meets KTD8's floor with it on.
+**Verification:** follow a train through several stations in LIVE and a simulated one in EXPLORE; confirm the frame budget holds with picking enabled.
+
 ### U15. Service status as light
 
 **Goal:** The city's nervous system shows stress — disruption rendered as light, not text.
@@ -330,18 +396,20 @@ Resequenced so the aesthetic payoff and the frame-budget baseline land before th
 
 ## Verification Contract
 
-1. Mock mode (`?mock=1`) renders trains, buses and cars with zero console errors and **zero network requests** — the always-green gate.
-2. Live mode: both proxies return 200s; neither API key appears in any served asset or network payload.
-3. Vitest suite passes: station data, bus interpolation, road-graph integrity, car simulation, poll governor, alert mapping.
-4. Frame rate at `LOOP_PRESET` with all layers on **meets KTD8's 30 fps floor** — recorded, and compared against the floor rather than merely noted.
-5. **Legibility:** all eight line colors nameable by eye from the map alone; a bus, cars and a train distinguishable in one frame; hairline cores visible where they cross building tops.
-6. **Chrome:** sidebar line toggles and DISPLAY toggles exercised, `LOOP` and `CITY` presets land correctly, compass tracks bearing, every control keyboard-reachable.
-7. **API safety:** no requests issued with the tab hidden; ledger survives reload; a lowered test ceiling halts polling and surfaces `BUDGET HOLD`.
-8. Screenshots delivered to Jojo: `LOOP_PRESET`, wide city, and a close-up containing a train, a bus and cars together.
+1. **EXPLORE mode (default boot)** renders trains, buses and cars with zero console errors and **zero network requests** — the always-green gate.
+2. **LIVE mode:** both proxies return 200s; neither API key appears in any served asset or network payload.
+3. **Mode switching:** toggling EXPLORE ↔ LIVE repeatedly leaves stable vehicle counts, no duplicate timers, and no stale vehicles from the prior mode.
+4. Vitest suite passes: station data, bus interpolation, road-graph integrity, car simulation, poll governor, alert mapping, mode transitions.
+5. Frame rate at `LOOP_PRESET` with all layers on **and picking enabled** meets KTD8's 30 fps floor — compared against the floor, not merely recorded.
+6. **Legibility (KTD12):** all eight line colors nameable by eye; a train, a bus and cars distinguishable in one frame by shape alone; bus capsules still read as elongated at the Loop framing; hairline cores visible where they cross building tops.
+7. **Follow mode:** follow a train through several stations in LIVE and a simulated one in EXPLORE; Esc and empty-space click both release; a vanishing vehicle releases cleanly.
+8. **Chrome:** mode toggle, sidebar line toggles, DISPLAY toggles, `LOOP` / `CITY` presets, compass; every control keyboard-reachable.
+9. **API safety:** no requests issued with the tab hidden or in EXPLORE mode; ledger survives reload; a lowered test ceiling halts polling and surfaces `BUDGET HOLD`.
+10. Screenshots delivered to Jojo: `LOOP_PRESET`, wide city, a close-up containing a train, a bus and cars together, and one from inside follow mode.
 
 ## Definition of Done
 
-All twelve requirements demonstrably met via the Verification Contract; per-unit commits pushed to the private repo; README updated with the bus key setup, the three build scripts, the documented API budget, and the revised follow-up list naming the vertical profile and GTFS-timetable simulation as the next pass.
+All fourteen requirements demonstrably met via the Verification Contract; per-unit commits pushed to the private repo; README updated with the bus key setup, the three build scripts, the documented API budget, the EXPLORE/LIVE mode explanation, and the revised follow-up list naming station labels and real Chicago building geometry as the next pass.
 
 ## Deferred to Implementation
 
@@ -366,4 +434,9 @@ Five of six reviewers returned: coherence, feasibility, design-lens, scope-guard
 
 **Rejected:** feasibility claimed the Bus Tracker default cap is 10,000/day and that KTD5's poll would exceed it. The official Bus Tracker guide v3.0 states 100,000, and the string "10,000" appears nowhere in either developer guide (both PDFs text-extracted and searched 2026-07-28). KTD5's 15s interval stands.
 
-**Deferred to Jojo** (surfaced, not applied): scope-guardian and adversarial both questioned whether live bus positions earn a second key given buses render as dim single-pass sprites — KTD5 now records the rationale, but simulating buses from `patterns.json` the way cars are simulated remains a legitimate alternative. Design-lens raised station/street labels and vehicle hover-inspection, both now explicit Scope Boundaries deferrals.
+**Resolved with Jojo after review** — the three deferred questions all closed, and the answers grew the plan:
+- *Live vs. simulated buses* (scope-guardian, adversarial): **both**, gated by mode. Buses stay live in LIVE mode (KTD5), and the simulated bus path becomes EXPLORE mode's renderer rather than a discarded alternative (KTD11, R13). The two-mode framing dissolved the tradeoff instead of picking a side.
+- *Vehicle interactivity* (design-lens): **reversed into scope** as click-to-follow (R14, U17). The deciding evidence was the reference itself — one extracted frame carries the labeled hint 「列車をクリック → 追尾モード（ESCで解除）」 ("click a train → follow mode, ESC to release"), making it a named feature of the instrument identity being borrowed, not a nice-to-have.
+- *Station and street labels* (design-lens): **stays deferred**, by choice — this pass is about movement, animation and color. Noted as the direct follow-up because it completes follow mode.
+
+Also settled: buses get glowing trails after all (KTD12 — Jojo's call, so shape and color temperature carry vehicle identity instead of presence-of-glow), building drama stays in this pass with movement/color prioritized ahead of it, and real Chicago building geometry is named as a future pass with candidate free data sources.
