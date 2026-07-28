@@ -7,9 +7,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { prepareLine, snapToLine } from './tracks.js';
+import { LINE_KEYS as L_ROUTES } from './layers.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const L_ROUTES = ['Red', 'Blue', 'Brn', 'G', 'Org', 'P', 'Pink', 'Y'];
 
 // Chicago bbox from the plan's test scenarios.
 const BBOX = { minLat: 41.6, maxLat: 42.2, minLon: -88.0, maxLon: -87.5 };

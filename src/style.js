@@ -4,31 +4,32 @@
 
 export const CHICAGO_LOOP = [-87.6298, 41.8781];
 
+// Both camera presets below share this center — U12's sidebar docks left at
+// ~300px, so every framing is biased east of the true Loop center to keep
+// the downtown core in the visible map area rather than behind the panel.
+// One constant, not a copy per preset, so the two can't drift apart.
+const SIDEBAR_BIASED_CENTER = [-87.6198, 41.8781]; // ~0.008deg (~660m) east of CHICAGO_LOOP
+
 // U7: fixed framing for the "shipping" view. Later units (sidebar in U12,
 // camera presets in U13) tune against this exact constant rather than
-// re-deriving numbers. The sidebar U12 adds is ~300px wide and docks left,
-// so the center is biased east of the true Loop center now — before the
-// sidebar exists — so the downtown core sits centered in the remaining map
-// area once it lands, instead of getting shoved behind it later.
+// re-deriving numbers.
 export const LOOP_PRESET = {
-  center: [-87.6198, 41.8781], // ~0.008deg (~660m) east of CHICAGO_LOOP
+  center: SIDEBAR_BIASED_CENTER,
   zoom: 15.4,
   pitch: 60,
   bearing: -12,
 };
 
 // U13: the "zoomed out to see the whole city" camera preset the CAMERA
-// section's CITY button flies to. Same center bias as LOOP_PRESET (so the
-// sidebar doesn't reframe what's centered), but zoomed way out and pitched
-// much gentler — this is meant to read as a real alternative to the tight,
-// dramatic LOOP_PRESET framing, not a minor variation on it. zoom 11.2
-// brings most of the city (Loop through the North Side and out past
-// Midway/O'Hare's inbound approach) into frame; pitch 35 keeps some of the
-// 3D skyline read without the steep, cinematic tilt of LOOP_PRESET's 60.
+// section's CITY button flies to — meant to read as a real alternative to
+// the tight, dramatic LOOP_PRESET framing, not a minor variation on it.
+// zoom 11.2 brings most of the city (Loop through the North Side and out
+// past Midway/O'Hare's inbound approach) into frame; pitch 35 keeps some of
+// the 3D skyline read without the steep, cinematic tilt of LOOP_PRESET's 60.
 // Bearing 0 (true north-up) contrasts with LOOP_PRESET's rotated -12 and
 // gives the compass a visible reason to move on flight.
 export const CITY_PRESET = {
-  center: [-87.6198, 41.8781],
+  center: SIDEBAR_BIASED_CENTER,
   zoom: 11.2,
   pitch: 35,
   bearing: 0,

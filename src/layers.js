@@ -31,13 +31,28 @@ export const LINE_COLORS = {
   Y: [255, 217, 26],
 };
 
+// Single source for "the 8 L lines, in a stable order" — hud.js, the vitest
+// suite, and scripts/build-tracks.mjs all previously hardcoded their own
+// copy of this exact list; derived from LINE_COLORS' keys instead so there
+// is one place to add/rename a line.
+export const LINE_KEYS = Object.keys(LINE_COLORS);
+
+// Shared "RGB triple → CSS rgb() string" conversion — previously duplicated
+// (with subtly different fallback behavior) between src/main.js's track
+// underglow and src/hud.js's line-badge styling.
+export function rgbString(color) {
+  return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+}
+
 const TRAIL_LENGTH = 45; // seconds of visible trail
 
 // R3: delayed trains pulse red-shifted; approaching trains brighten. Both
 // flags come from the CTA payload's isDly/isApp (surfaced in src/trains.js)
 // or the mock generator's synthetic toggles. Returns per-train style
 // multipliers consumed by every glow layer below so the treatment is
-// consistent across the whole light-cycle stack.
+// consistent across the whole light-cycle stack. Every branch returns the
+// same shape (including `brightBoost`) so callers can read it directly
+// without an `?? 1` fallback.
 function trainStyle(t, currentTime) {
   const staleFade = t.state === 'stale' ? 0.35 : 1;
   if (t.isDly) {
@@ -48,6 +63,7 @@ function trainStyle(t, currentTime) {
       core: [255, 70, 70],
       fade: staleFade * pulse,
       radiusMult: 1,
+      brightBoost: 1,
     };
   }
   if (t.isApp) {
@@ -63,14 +79,29 @@ function trainStyle(t, currentTime) {
   return { core: [255, 255, 255], fade: staleFade, radiusMult: 1, brightBoost: 1 };
 }
 
-export function buildLayers(
-  trains,
-  currentTime,
-  visibleLines,
-  trailVersion = 0,
-  stations = {},
-  display = { trains: true, stations: true }
-) {
+// Stations only change when a line is toggled or the DISPLAY toggle flips —
+// essentially never, frame-to-frame. Recomputing the ridership-filtered list
+// from scratch every frame (60x/sec) is pure waste, so it's cached here
+// against a cheap signature of the two things that can actually change it.
+let stationsCacheKey = null;
+let stationsCache = [];
+function getShownStations(stations, visibleLines, display) {
+  if (!display.stations) return [];
+  const key = `${[...visibleLines].sort().join(',')}`;
+  if (key !== stationsCacheKey) {
+    stationsCacheKey = key;
+    stationsCache = Object.values(stations).filter((s) => s.lines.some((l) => visibleLines.has(l)));
+  }
+  return stationsCache;
+}
+
+export function buildLayers(trains, currentTime, visibleLines, options = {}) {
+  // Options object rather than positional params: Phase B (buses, cars,
+  // alerts — see the neon-city plan) adds more feeds here, and a growing
+  // positional signature means every future addition is another
+  // ordering-fragile slot at the one call site in src/main.js.
+  const { trailVersion = 0, stations = {}, display = { trains: true, stations: true } } = options;
+
   // U12's DISPLAY toggles: `trains`/`stations` off means "don't draw this
   // layer at all," independent of the per-line `visibleLines` Set below.
   // Empty arrays keep the layer objects themselves stable (same layer
@@ -78,14 +109,12 @@ export function buildLayers(
   const shown = display.trains
     ? trains.filter((t) => t.pos && visibleLines.has(t.line) && t.state !== 'removed')
     : [];
-  // Computed once per frame per train (not once per accessor call) — three
-  // glow-head layers each read this, and the pulse math is cheap but no
-  // reason to triple it up.
-  const styles = new Map(shown.map((t) => [t, trainStyle(t, currentTime)]));
+  // Style computed once per frame per train and attached directly to a
+  // {t, style} pair — the three glow-head layers below read d.style as a
+  // plain field instead of doing a Map.get(d) per accessor call.
+  const shownStyled = shown.map((t) => ({ t, style: trainStyle(t, currentTime) }));
 
-  const shownStations = display.stations
-    ? Object.values(stations).filter((s) => s.lines.some((l) => visibleLines.has(l)))
-    : [];
+  const shownStations = getShownStations(stations, visibleLines, display);
 
   return [
     new TripsLayer({
@@ -120,13 +149,10 @@ export function buildLayers(
     // wide halo
     new ScatterplotLayer({
       id: 'glow-halo',
-      data: shown,
-      getPosition: (d) => d.pos,
-      getFillColor: (d) => {
-        const s = styles.get(d);
-        return [...LINE_COLORS[d.line], 40 * s.fade * (s.brightBoost ?? 1)];
-      },
-      getRadius: (d) => 120 * styles.get(d).radiusMult,
+      data: shownStyled,
+      getPosition: (d) => d.t.pos,
+      getFillColor: (d) => [...LINE_COLORS[d.t.line], 40 * d.style.fade * d.style.brightBoost],
+      getRadius: (d) => 120 * d.style.radiusMult,
       radiusUnits: 'meters',
       radiusMinPixels: 10,
       parameters: { depthTest: false },
@@ -134,13 +160,10 @@ export function buildLayers(
     // mid glow
     new ScatterplotLayer({
       id: 'glow-mid',
-      data: shown,
-      getPosition: (d) => d.pos,
-      getFillColor: (d) => {
-        const s = styles.get(d);
-        return [...LINE_COLORS[d.line], 110 * s.fade * (s.brightBoost ?? 1)];
-      },
-      getRadius: (d) => 45 * styles.get(d).radiusMult,
+      data: shownStyled,
+      getPosition: (d) => d.t.pos,
+      getFillColor: (d) => [...LINE_COLORS[d.t.line], 110 * d.style.fade * d.style.brightBoost],
+      getRadius: (d) => 45 * d.style.radiusMult,
       radiusUnits: 'meters',
       radiusMinPixels: 5,
       parameters: { depthTest: false },
@@ -148,13 +171,10 @@ export function buildLayers(
     // bright core — hot white normally, red-shifted+pulsing when delayed
     new ScatterplotLayer({
       id: 'glow-core',
-      data: shown,
-      getPosition: (d) => d.pos,
-      getFillColor: (d) => {
-        const s = styles.get(d);
-        return [...s.core, 235 * s.fade];
-      },
-      getRadius: (d) => 14 * styles.get(d).radiusMult,
+      data: shownStyled,
+      getPosition: (d) => d.t.pos,
+      getFillColor: (d) => [...d.style.core, 235 * d.style.fade],
+      getRadius: (d) => 14 * d.style.radiusMult,
       radiusUnits: 'meters',
       radiusMinPixels: 2.5,
       parameters: { depthTest: false },
@@ -163,7 +183,7 @@ export function buildLayers(
     // by each station's ridership weight (0.12 floor .. 1.0 ceiling — see
     // scripts/build-tracks.mjs) so the Loop's high-ridership cluster blazes
     // and outlying stops read as embers. Colored by the station's
-    // highest-priority served line (L_ROUTES order) — multi-line stations
+    // highest-priority served line (LINE_KEYS order) — multi-line stations
     // (e.g. Belmont) get one ring in that line's color rather than one per
     // line, keeping the punctuation legible instead of stacking rings.
     new ScatterplotLayer({

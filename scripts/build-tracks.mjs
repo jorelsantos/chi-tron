@@ -12,9 +12,9 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LINE_KEYS as L_ROUTES } from '../src/layers.js';
 
 const GTFS_URL = 'https://www.transitchicago.com/downloads/sch_data/google_transit.zip';
-const L_ROUTES = ['Red', 'Blue', 'Brn', 'G', 'Org', 'P', 'Pink', 'Y'];
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '../public/data/tracks.json');
 const STATIONS_OUT = join(dirname(fileURLToPath(import.meta.url)), '../public/data/stations.json');
 

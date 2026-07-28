@@ -3,7 +3,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapboxOverlay } from '@deck.gl/mapbox';
 import { DARK_CITY_STYLE, FALLBACK_STYLE, LOOP_PRESET } from './style.js';
 import { TrainEngine, now } from './trains.js';
-import { buildLayers, LINE_COLORS } from './layers.js';
+import { buildLayers, LINE_COLORS, rgbString } from './layers.js';
 import { createHud } from './hud.js';
 
 const MOCK = new URLSearchParams(location.search).has('mock');
@@ -25,16 +25,21 @@ setInterval(() => {
 }, 1000);
 
 async function boot() {
-  const tracks = await fetch('/data/tracks.json').then((r) => r.json());
-  // Guarded: stations are a U8 addition to a pipeline that predates them —
-  // a missing/failed stations.json should dim the ring layer, not black out
-  // the map the way an unguarded tracks.json failure would.
-  const stations = await fetch('/data/stations.json')
-    .then((r) => (r.ok ? r.json() : {}))
-    .catch((err) => {
-      console.warn('[chi-tron] stations.json failed to load, station rings disabled:', err.message);
-      return {};
-    });
+  // Fetched in parallel — tracks and stations have no data dependency on
+  // each other, so awaiting them sequentially would add stations' latency
+  // on top of tracks' for no reason. Stations are guarded (a U8 addition to
+  // a pipeline that predates them): a missing/failed stations.json should
+  // dim the ring layer, not black out the map the way an unguarded
+  // tracks.json failure would.
+  const [tracks, stations] = await Promise.all([
+    fetch('/data/tracks.json').then((r) => r.json()),
+    fetch('/data/stations.json')
+      .then((r) => (r.ok ? r.json() : {}))
+      .catch((err) => {
+        console.warn('[chi-tron] stations.json failed to load, station rings disabled:', err.message);
+        return {};
+      }),
+  ]);
 
   const map = new maplibregl.Map({
     container: 'map',
@@ -68,19 +73,17 @@ async function boot() {
   // wide/very-low-opacity bloom halo, a mid pass to soften the falloff, and
   // a hairline bright core — so lines read as *glowing*, not drawn (R2).
   // All three passes share one GeoJSON source (`l-tracks`) and every
-  // feature carries `properties.line`, so a later unit (U12's per-line
-  // sidebar toggle) can hide one line's whole glow stack with a single
-  // shared mechanism — e.g. looping TRACK_GLOW_LAYER_IDS and calling
-  // map.setFilter(id, ['!=', ['get', 'line'], hiddenKey]) on each — without
-  // restructuring this function. Not built yet; just not painted out of.
+  // feature carries `properties.line`, so hud.js's per-line sidebar toggle
+  // (U12) can hide one line's whole glow stack with a single shared
+  // mechanism (map.setFilter on each id in this list) via the
+  // `trackGlowLayerIds` param passed to createHud() below.
   const TRACK_GLOW_LAYER_IDS = ['l-tracks-wide', 'l-tracks-mid', 'l-tracks-core'];
-  window.__trackGlowLayerIds = TRACK_GLOW_LAYER_IDS; // hook for the future toggle unit
   function addTrackUnderglow() {
     const features = Object.entries(tracks).map(([key, line]) => ({
       type: 'Feature',
       properties: {
         line: key,
-        color: `rgb(${LINE_COLORS[key]?.join(',') ?? '80,80,120'})`,
+        color: LINE_COLORS[key] ? rgbString(LINE_COLORS[key]) : 'rgb(80, 80, 120)',
       },
       geometry: { type: 'LineString', coordinates: line.coords },
     }));
@@ -203,7 +206,11 @@ async function boot() {
     const trains = engine.tick();
     hud.tick(trains);
     overlay.setProps({
-      layers: buildLayers(trains, now(), visibleLines, engine.trailVersion, stations, display),
+      layers: buildLayers(trains, now(), visibleLines, {
+        trailVersion: engine.trailVersion,
+        stations,
+        display,
+      }),
     });
     requestAnimationFrame(frame);
   }

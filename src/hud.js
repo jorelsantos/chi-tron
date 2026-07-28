@@ -19,8 +19,7 @@
 // build toggles or status rows for anything that doesn't render yet.
 
 import { LOOP_PRESET, CITY_PRESET } from './style.js';
-
-const LINE_ORDER = ['Red', 'Blue', 'Brn', 'G', 'Org', 'P', 'Pink', 'Y'];
+import { LINE_KEYS, rgbString } from './layers.js';
 
 const LINE_NAMES = {
   Red: 'Red Line',
@@ -54,10 +53,6 @@ const CAMERA_PRESETS = [
 const FLY_DURATION_MS = 2200;
 
 const EM_DASH = '—';
-
-function rgb(color) {
-  return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-}
 
 /**
  * @param {object} opts
@@ -95,11 +90,11 @@ export function createHud({ map, lineColors, visibleLines, display, trackGlowLay
     applyLineFilters();
   }
 
-  for (const key of LINE_ORDER) {
+  for (const key of LINE_KEYS) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'line-row';
-    btn.style.setProperty('--line-color', rgb(lineColors[key] ?? [160, 160, 160]));
+    btn.style.setProperty('--line-color', rgbString(lineColors[key] ?? [160, 160, 160]));
     btn.setAttribute('aria-pressed', String(visibleLines.has(key)));
 
     const badge = document.createElement('span');
@@ -135,10 +130,17 @@ export function createHud({ map, lineColors, visibleLines, display, trackGlowLay
     }
   }
 
+  // Side effects a DISPLAY toggle needs beyond flipping `display[key]` —
+  // only "buildings" has one today (it's a MapLibre style layer, not part
+  // of the deck.gl stack buildLayers() reads), but keying this off a lookup
+  // rather than an `if (key === ...)` chain in toggleDisplay means the next
+  // style-backed toggle is a new table entry, not a new branch.
+  const onDisplayToggle = { buildings: setBuildingsVisible };
+
   function toggleDisplay(key) {
     display[key] = !display[key];
     displayButtons.get(key)?.setAttribute('aria-pressed', String(display[key]));
-    if (key === 'buildings') setBuildingsVisible(display[key]);
+    onDisplayToggle[key]?.(display[key]);
   }
 
   for (const { key, label } of DISPLAY_TOGGLES) {
@@ -208,6 +210,17 @@ export function createHud({ map, lineColors, visibleLines, display, trackGlowLay
 
   // ---- Per-frame tick -------------------------------------------------------
 
+  // Reused every tick() call instead of allocating a fresh Map 60x/sec just
+  // to hold 8 counters that get zeroed and refilled each time anyway.
+  const lineCounts = Object.fromEntries(LINE_KEYS.map((k) => [k, 0]));
+  // The viewport only changes on an actual camera move, not every animation
+  // frame, so cache it there instead of calling map.getBounds() (an
+  // allocation) inside the 60x/sec tick().
+  let cachedBounds = map.getBounds();
+  map.on('move', () => {
+    cachedBounds = map.getBounds();
+  });
+
   /**
    * Called once per animation frame from main.js with the engine's current
    * (non-removed) train list. Updates the LINES section's system-wide
@@ -217,26 +230,25 @@ export function createHud({ map, lineColors, visibleLines, display, trackGlowLay
     const status = getStatus ? getStatus() : null;
     const noData = status === 'lost';
 
-    const counts = new Map(LINE_ORDER.map((k) => [k, 0]));
-    const bounds = map.getBounds();
+    for (const key of LINE_KEYS) lineCounts[key] = 0;
     let inView = 0;
 
     for (const t of trains) {
       if (!t.pos || t.state === 'removed') continue;
-      counts.set(t.line, (counts.get(t.line) ?? 0) + 1);
+      lineCounts[t.line] = (lineCounts[t.line] ?? 0) + 1;
       // "In view" means visibly on the map right now, so it respects both
       // the trains DISPLAY toggle and each line's own visibility — an
       // invisible train isn't "in view" just because it's inside the
       // viewport rectangle.
-      if (display.trains && visibleLines.has(t.line) && bounds.contains(t.pos)) {
+      if (display.trains && visibleLines.has(t.line) && cachedBounds.contains(t.pos)) {
         inView++;
       }
     }
 
-    for (const key of LINE_ORDER) {
+    for (const key of LINE_KEYS) {
       const el = lineCountEls.get(key);
       if (!el) continue;
-      const c = counts.get(key) ?? 0;
+      const c = lineCounts[key] ?? 0;
       el.textContent = noData || c === 0 ? EM_DASH : String(c);
     }
 
