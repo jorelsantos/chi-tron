@@ -18,6 +18,19 @@ export function now() {
   return performance.now() / 1000; // seconds since page load — TripsLayer time base
 }
 
+// CTA's Train Tracker payload encodes booleans as the strings "1"/"0" (per
+// the developer guide), not JSON booleans — this normalizes either shape.
+function toBool(v) {
+  return v === '1' || v === true || v === 1;
+}
+
+// U8: how often a mock train's synthetic isDly/isApp flags get re-rolled.
+// Randomized within this window so trains don't all flip in lockstep.
+const MOCK_FLAG_REROLL_MIN_S = 10;
+const MOCK_FLAG_REROLL_MAX_S = 30;
+const MOCK_DELAY_CHANCE = 0.1;
+const MOCK_APPROACH_CHANCE = 0.1;
+
 export class TrainEngine {
   constructor(tracksData) {
     this.lines = {};
@@ -59,6 +72,17 @@ export class TrainEngine {
       train.dist = Math.max(0, Math.min(train.dist, line.totalDist));
     }
     train.lastTick = t;
+
+    // U8 step 6: mock trains never receive real isDly/isApp from a feed, so
+    // synthesize occasional flips here — this is what makes the delayed/
+    // approaching render treatments (src/layers.js trainStyle) visible and
+    // testable under ?mock=1 with no live feed at all.
+    if (t >= train.nextFlagRoll) {
+      train.isDly = Math.random() < MOCK_DELAY_CHANCE;
+      train.isApp = Math.random() < MOCK_APPROACH_CHANCE;
+      train.nextFlagRoll =
+        t + MOCK_FLAG_REROLL_MIN_S + Math.random() * (MOCK_FLAG_REROLL_MAX_S - MOCK_FLAG_REROLL_MIN_S);
+    }
   }
 
   #appendTrail(train, t) {
@@ -95,6 +119,10 @@ export class TrainEngine {
           missedPolls: 0,
           trail: [],
           pos: null,
+          isDly: false,
+          isApp: false,
+          // Stagger initial re-roll so all seeded trains don't flip together.
+          nextFlagRoll: now() + Math.random() * MOCK_FLAG_REROLL_MAX_S,
         });
       }
     }
@@ -152,6 +180,8 @@ export class TrainEngine {
           existing.targetDist = snap.dist;
           existing.state = 'tracking';
           existing.missedPolls = 0;
+          existing.isDly = toBool(t.isDly);
+          existing.isApp = toBool(t.isApp);
         } else {
           this.trains.set(id, {
             id,
@@ -166,6 +196,8 @@ export class TrainEngine {
             missedPolls: 0,
             trail: [],
             pos: null,
+            isDly: toBool(t.isDly),
+            isApp: toBool(t.isApp),
           });
         }
       }

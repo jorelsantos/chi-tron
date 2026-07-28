@@ -22,6 +22,15 @@ setInterval(() => {
 
 async function boot() {
   const tracks = await fetch('/data/tracks.json').then((r) => r.json());
+  // Guarded: stations are a U8 addition to a pipeline that predates them —
+  // a missing/failed stations.json should dim the ring layer, not black out
+  // the map the way an unguarded tracks.json failure would.
+  const stations = await fetch('/data/stations.json')
+    .then((r) => (r.ok ? r.json() : {}))
+    .catch((err) => {
+      console.warn('[chi-tron] stations.json failed to load, station rings disabled:', err.message);
+      return {};
+    });
 
   const map = new maplibregl.Map({
     container: 'map',
@@ -51,11 +60,22 @@ async function boot() {
     }
   });
 
-  // Dim under-glow of the full network so the track grid reads everywhere.
+  // Neon under-glow of the full network: three stacked passes per line —
+  // wide/very-low-opacity bloom halo, a mid pass to soften the falloff, and
+  // a hairline bright core — so lines read as *glowing*, not drawn (R2).
+  // All three passes share one GeoJSON source (`l-tracks`) and every
+  // feature carries `properties.line`, so a later unit (U12's per-line
+  // sidebar toggle) can hide one line's whole glow stack with a single
+  // shared mechanism — e.g. looping TRACK_GLOW_LAYER_IDS and calling
+  // map.setFilter(id, ['!=', ['get', 'line'], hiddenKey]) on each — without
+  // restructuring this function. Not built yet; just not painted out of.
+  const TRACK_GLOW_LAYER_IDS = ['l-tracks-wide', 'l-tracks-mid', 'l-tracks-core'];
+  window.__trackGlowLayerIds = TRACK_GLOW_LAYER_IDS; // hook for the future toggle unit
   function addTrackUnderglow() {
     const features = Object.entries(tracks).map(([key, line]) => ({
       type: 'Feature',
       properties: {
+        line: key,
         color: `rgb(${LINE_COLORS[key]?.join(',') ?? '80,80,120'})`,
       },
       geometry: { type: 'LineString', coordinates: line.coords },
@@ -65,17 +85,43 @@ async function boot() {
       type: 'geojson',
       data: { type: 'FeatureCollection', features },
     });
+    // Wide soft bloom halo — most of the "glow" read comes from this pass.
     map.addLayer({
       id: 'l-tracks-wide',
       type: 'line',
       source: 'l-tracks',
-      paint: { 'line-color': ['get', 'color'], 'line-opacity': 0.10, 'line-width': 6 },
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-opacity': 0.14,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 5, 16, 16],
+        'line-blur': 3,
+      },
     });
+    // Mid pass — softens the step between the wide halo and the hairline
+    // core so the falloff reads as continuous bloom rather than two rings.
+    map.addLayer({
+      id: 'l-tracks-mid',
+      type: 'line',
+      source: 'l-tracks',
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-opacity': 0.4,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2, 16, 5],
+        'line-blur': 1,
+      },
+    });
+    // Hairline bright core — the actual "line" a viewer's eye follows.
+    // Near-opaque at its own saturated color (not white) so each line's
+    // hue stays identifiable at a glance, even crossing a building crown.
     map.addLayer({
       id: 'l-tracks-core',
       type: 'line',
       source: 'l-tracks',
-      paint: { 'line-color': ['get', 'color'], 'line-opacity': 0.35, 'line-width': 1.2 },
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-opacity': 0.95,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.6, 16, 1.6],
+      },
     });
   }
   map.on('load', () => {
@@ -135,7 +181,7 @@ async function boot() {
 
     const trains = engine.tick();
     overlay.setProps({
-      layers: buildLayers(trains, now(), visibleLines, engine.trailVersion),
+      layers: buildLayers(trains, now(), visibleLines, engine.trailVersion, stations),
     });
     requestAnimationFrame(frame);
   }
