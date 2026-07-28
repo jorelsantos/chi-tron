@@ -7,6 +7,7 @@
 // same way it treats trains and buses.
 
 import { now } from './trains.js';
+import { M_PER_DEG_LAT, mPerDegLon, bearingDeg, interpAtDist } from './tracks.js';
 
 // KTD9 / the High-Level Technical Design's pseudo-code: "a global clock
 // decides whether its north-south or east-west approach is green on a ~8s
@@ -49,9 +50,6 @@ const CLASS_WEIGHT = { primary: 3, secondary: 2, tertiary: 1.3, residential: 1 }
 // a hop ceiling rather than an unbounded loop within one tick.
 const MAX_HOPS_PER_TICK = 50;
 
-const M_PER_DEG_LAT = 111320;
-const mPerDegLon = (lat) => 111320 * Math.cos((lat * Math.PI) / 180);
-
 function cumulativeMeters(coords) {
   const cum = [0];
   for (let i = 1; i < coords.length; i++) {
@@ -85,34 +83,11 @@ function prepareEdge(e) {
   };
 }
 
-// Distance-along-path (meters) -> [lon, lat]. Binary search over a
-// cumulative-distance array, identical in shape to buses.js's
-// interpolatePattern over pdist — same technique, different unit.
+// Distance-along-path (meters) -> [lon, lat]. tracks.js's shared
+// interpAtDist over a cumulative-distance array — identical in shape to
+// buses.js's interpolatePattern over pdist, same technique, different unit.
 function interpAlong(coords, cum, dist) {
-  const total = cum[cum.length - 1];
-  const d = Math.max(0, Math.min(dist, total));
-  let lo = 0;
-  let hi = cum.length - 1;
-  while (lo < hi - 1) {
-    const mid = (lo + hi) >> 1;
-    if (cum[mid] <= d) lo = mid;
-    else hi = mid;
-  }
-  const segLen = cum[hi] - cum[lo];
-  const t = segLen > 0 ? (d - cum[lo]) / segLen : 0;
-  return [
-    coords[lo][0] + t * (coords[hi][0] - coords[lo][0]),
-    coords[lo][1] + t * (coords[hi][1] - coords[lo][1]),
-  ];
-}
-
-function bearingDeg([lon1, lat1], [lon2, lat2]) {
-  const rad = Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.cos(((lat1 + lat2) / 2) * rad);
-  const dLat = lat2 - lat1;
-  let deg = Math.atan2(dLon, dLat) / rad;
-  if (deg < 0) deg += 360;
-  return deg;
+  return interpAtDist(dist, cum[cum.length - 1], (i) => cum[i], (i) => coords[i], cum.length);
 }
 
 function headingAtDist(coords, cum, dist) {

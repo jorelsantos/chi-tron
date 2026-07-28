@@ -22,20 +22,23 @@ const fpsEl = document.getElementById('fps');
 
 let feedStatus = 'boot'; // read by hud.js's tick() to render the em-dash no-data state
 
-function setStatus(state) {
-  feedStatus = state;
+// U14's states (mock/lost/hold/live) plus U9's bus-only 'disabled' all share
+// one className rule and one "state -> label" lookup shape — this replaced
+// two independently-written copies of the same ternary chain (trains' and
+// buses' status pills differed only in label text).
+function renderFeedStatus(el, state, labels) {
+  if (!el) return;
   // U14: 'hold' is the poll governor's BUDGET HOLD state (src/poller.js) —
   // the feed hit its self-imposed daily ceiling (R10) and has stopped
   // issuing requests until the ledger's local date rolls over.
-  statusEl.className = `hud ${state === 'lost' ? 'lost' : state === 'hold' ? 'hold' : 'live'}`;
-  statusEl.textContent =
-    state === 'mock'
-      ? 'SIM MODE'
-      : state === 'lost'
-        ? 'SIGNAL LOST'
-        : state === 'hold'
-          ? 'BUDGET HOLD'
-          : 'LIVE FEED';
+  el.className = `hud ${state === 'lost' ? 'lost' : state === 'hold' ? 'hold' : 'live'}`;
+  el.textContent = labels[state] ?? labels.live;
+}
+
+const TRAIN_STATUS_LABELS = { mock: 'SIM MODE', lost: 'SIGNAL LOST', hold: 'BUDGET HOLD', live: 'LIVE FEED' };
+function setStatus(state) {
+  feedStatus = state;
+  renderFeedStatus(statusEl, state, TRAIN_STATUS_LABELS);
 }
 
 // U9: the bus feed's own status, distinct from the trains status above — a
@@ -43,19 +46,9 @@ function setStatus(state) {
 // #status reading LIVE FEED while the bus layer is empty (buses.js's
 // isAuthError() is what turns that failure mode into a real 'error' status
 // here, via BusEngine's onStatus callback).
+const BUS_STATUS_LABELS = { mock: 'BUS SIM', lost: 'BUS LOST', hold: 'BUS HOLD', disabled: 'BUS OFF', live: 'BUS LIVE' };
 function setBusStatus(state) {
-  if (!busStatusEl) return;
-  busStatusEl.className = `hud ${state === 'lost' ? 'lost' : state === 'hold' ? 'hold' : 'live'}`;
-  busStatusEl.textContent =
-    state === 'mock'
-      ? 'BUS SIM'
-      : state === 'lost'
-        ? 'BUS LOST'
-        : state === 'hold'
-          ? 'BUS HOLD'
-          : state === 'disabled'
-            ? 'BUS OFF'
-            : 'BUS LIVE';
+  renderFeedStatus(busStatusEl, state, BUS_STATUS_LABELS);
 }
 
 setInterval(() => {
@@ -64,14 +57,18 @@ setInterval(() => {
 
 async function boot() {
   // tracks.json is load-bearing — the map can't render anything without it,
-  // so boot() awaits it directly. stations.json is NOT awaited here: it's
-  // optional (a missing/failed load only dims the ring layer, never blocks
-  // the map), and gating boot on it via Promise.all would let a stalled —
-  // not even failed — connection to it hang map init forever, since a fetch
-  // that never settles never reaches the .catch that would otherwise turn it
-  // into {}. Fetching it independently means boot only ever waits on the
-  // resource that's actually required.
-  const tracks = await fetch('/data/tracks.json').then((r) => r.json());
+  // so boot() awaits it below. It's issued here, alongside every other
+  // fetch, rather than awaited immediately: stations/patterns/roads don't
+  // depend on tracks at all, so starting them only after tracks resolves
+  // (simplify pass: they previously did) needlessly serializes four
+  // independent round-trips into one. stations.json is NOT awaited at all:
+  // it's optional (a missing/failed load only dims the ring layer, never
+  // blocks the map), and gating boot on it via Promise.all would let a
+  // stalled — not even failed — connection to it hang map init forever,
+  // since a fetch that never settles never reaches the .catch that would
+  // otherwise turn it into {}. Fetching it independently means boot only
+  // ever waits on the resource that's actually required.
+  const tracksPromise = fetch('/data/tracks.json').then((r) => r.json());
   let stations = {};
   fetch('/data/stations.json')
     .then((r) => (r.ok ? r.json() : {}))
@@ -122,6 +119,8 @@ async function boot() {
     .catch((err) => {
       console.warn('[chi-tron] roads.json failed to load, cars disabled:', err.message);
     });
+
+  const tracks = await tracksPromise;
 
   const map = new maplibregl.Map({
     container: 'map',
@@ -251,7 +250,8 @@ async function boot() {
   map.addControl(overlay);
 
   const engine = new TrainEngine(tracks);
-  const visibleLines = new Set(Object.keys(tracks));
+  const trackKeys = Object.keys(tracks); // tracks never changes after boot — computed once, not per frame
+  const visibleLines = new Set(trackKeys);
   // U12's DISPLAY toggles — buildLayers() reads trains/buses/stations;
   // buildings isn't part of the deck.gl stack so hud.js applies it straight
   // to the MapLibre style instead of routing it through this object.
@@ -407,10 +407,10 @@ async function boot() {
     // no-engine branch per feed.
     const buses = busEngine ? busEngine.tick() : [];
     // U11: bounds gates which cars get updated at all (frozen off-viewport,
-    // per the plan's viewport-culling requirement) — anything exposing
-    // .contains([lon,lat]) works, and map.getBounds() already does (same
-    // duck-typed use hud.js's own cachedBounds.contains() makes).
-    const cars = carEngine ? carEngine.tick(now(), map.getBounds()) : [];
+    // per the plan's viewport-culling requirement) — reads hud.js's own
+    // cached bounds (updated on map 'move', not per frame) rather than
+    // calling the allocating map.getBounds() a second time this frame.
+    const cars = carEngine ? carEngine.tick(now(), hud.getBounds()) : [];
 
     // U17 step 2/3: recenters on the followed vehicle's *this-frame*
     // position, preserving zoom/pitch/bearing (setCenter touches only
@@ -432,7 +432,7 @@ async function boot() {
     // feature every frame — see addTrackUnderglow()'s stressOpacity comment for
     // why this is opacity-only, not a color change, on this particular layer.
     if (map.getSource('l-tracks')) {
-      for (const key of Object.keys(tracks)) {
+      for (const key of trackKeys) {
         const tag = alertsEngine.lineStatus[key] ?? 'normal';
         const opacityMult = lineStressTreatment(tag, currentTime).opacityMult;
         map.setFeatureState({ source: 'l-tracks', id: key }, { stressOpacity: opacityMult });

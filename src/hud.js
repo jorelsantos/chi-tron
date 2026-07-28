@@ -342,6 +342,12 @@ export function createHud({
   map.on('move', () => {
     cachedBounds = map.getBounds();
   });
+  // U11's car tick also needs the current viewport bounds every frame for
+  // its own off-viewport freeze check — exposed here rather than main.js
+  // calling map.getBounds() a second time per frame for the same value.
+  function getBounds() {
+    return cachedBounds;
+  }
 
   /**
    * Called once per animation frame from main.js with the engine's current
@@ -387,5 +393,6 @@ export function createHud({
     setMode,
     flashFallbackNote,
     setFollowLabel,
+    getBounds,
   };
 }

@@ -20,6 +20,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { M_PER_DEG_LAT, mPerDegLon } from '../src/tracks.js';
 
 const BASE = 'https://www.ctabustracker.com/bustime/api/v3';
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '../public/data/patterns.json');
@@ -46,10 +47,7 @@ export const MARQUEE_ROUTES = [
   '77', '79', '80', '82', '146', '147', '152', '55', '63', 'X9',
 ];
 
-const ORIGIN_LAT = 41.85;
-const M_PER_DEG_LAT = 111320;
 const FT_PER_M = 3.28084;
-const mPerDegLon = (lat) => 111320 * Math.cos((lat * Math.PI) / 180);
 
 async function fetchPatterns(rt) {
   const url = `${BASE}/getpatterns?key=${KEY}&rt=${encodeURIComponent(rt)}&format=json`;

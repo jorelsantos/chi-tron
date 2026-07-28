@@ -8,6 +8,8 @@
 import { TripsLayer } from '@deck.gl/geo-layers';
 import { ScatterplotLayer, PathLayer } from '@deck.gl/layers';
 import { capBuses } from './buses.js';
+import { CAR_CAP } from './cars.js';
+import { mPerDegLon, M_PER_DEG_LAT } from './tracks.js';
 
 // U8: pushed past the literal CTA palette toward saturated neon (R2), and
 // away from the amber/orange building-crown hue src/style.js adds in U7
@@ -82,7 +84,6 @@ const BUS_TRAIL_LENGTH = 18;
 // zoom, not the whole city) — fading the layer out there, rather than at
 // CITY_PRESET's zoom, is what keeps that boundary from ever being on screen.
 const CAR_MIN_ZOOM = 14;
-const CAR_CAP_RENDER = 220; // mirrors cars.js's CAR_CAP — engine already caps count, this only bounds a defensive slice
 const CAR_BODY_HALF_LEN_M = 2.2;
 const CAR_BODY_WIDTH_M = 1.7;
 const CAR_LIGHT_LATERAL_M = 0.8; // half the headlight/taillight pair's spacing
@@ -90,17 +91,27 @@ const CAR_BODY_COLOR = [18, 18, 22];
 const CAR_HEADLIGHT_COLOR = [255, 190, 90];
 const CAR_TAILLIGHT_COLOR = [220, 35, 35];
 
-const M_PER_DEG_LAT_L = 111320;
-
 // Offsets `[lon, lat]` by `meters` along compass bearing `headingDeg`
 // (0 = north, clockwise) — used to build each bus's two-point capsule path
 // from its center position and direction of travel. Small enough offsets
-// (tens of meters) that the flat local-degrees approximation used elsewhere
-// in this repo (tracks.js's toMeters) is accurate well under a meter.
+// (tens of meters) that the flat local-degrees approximation (tracks.js's
+// shared mPerDegLon, also used by toMeters) is accurate well under a meter.
 function offsetPoint([lon, lat], headingDeg, meters) {
   const rad = (headingDeg * Math.PI) / 180;
-  const mPerDegLonHere = 111320 * Math.cos((lat * Math.PI) / 180);
-  return [lon + (Math.sin(rad) * meters) / mPerDegLonHere, lat + (Math.cos(rad) * meters) / M_PER_DEG_LAT_L];
+  return [lon + (Math.sin(rad) * meters) / mPerDegLon(lat), lat + (Math.cos(rad) * meters) / M_PER_DEG_LAT];
+}
+
+// Builds a headlight-or-taillight pair: two lights offset `lengthOffset`
+// meters forward/back along the car's heading, then ±90° laterally by
+// CAR_LIGHT_LATERAL_M. Replaces four near-identical nested offsetPoint()
+// calls (front-left/front-right/back-left/back-right) with one call site
+// per pair.
+function lightPair(pos, headingDeg, lengthOffset) {
+  const anchor = offsetPoint(pos, headingDeg, lengthOffset);
+  return [
+    offsetPoint(anchor, headingDeg - 90, CAR_LIGHT_LATERAL_M),
+    offsetPoint(anchor, headingDeg + 90, CAR_LIGHT_LATERAL_M),
+  ];
 }
 
 // R3: delayed trains pulse red-shifted; approaching trains brighten. Both
@@ -209,10 +220,14 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   // d.style/d.stress as plain fields instead of doing a Map.get(d) per
   // accessor call. stress is U15's per-line disruption treatment (R12) —
   // independent of style, which is per-train (isDly/isApp), not per-line.
+  // lineStressTreatment() only varies by line + currentTime, so it's cached
+  // per line here rather than recomputed for every train riding that line.
+  const stressByLine = {};
+  const stressFor = (line) => stressByLine[line] ?? (stressByLine[line] = lineStressTreatment(lineStatus[line], currentTime));
   const shownStyled = shown.map((t) => ({
     t,
     style: trainStyle(t, currentTime),
-    stress: lineStressTreatment(lineStatus[t.line], currentTime),
+    stress: stressFor(t.line),
   }));
 
   // U9: same "off = empty array, not a conditionally-omitted layer" pattern
@@ -226,15 +241,9 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   // convention as every other feed — not a conditionally-omitted layer, so
   // the layer count never changes frame to frame.
   const shownCars =
-    display.cars && zoom >= CAR_MIN_ZOOM ? cars.filter((c) => c.pos).slice(0, CAR_CAP_RENDER) : [];
-  const headlights = shownCars.flatMap((c) => [
-    offsetPoint(offsetPoint(c.pos, c.heading, CAR_BODY_HALF_LEN_M), c.heading - 90, CAR_LIGHT_LATERAL_M),
-    offsetPoint(offsetPoint(c.pos, c.heading, CAR_BODY_HALF_LEN_M), c.heading + 90, CAR_LIGHT_LATERAL_M),
-  ]);
-  const taillights = shownCars.flatMap((c) => [
-    offsetPoint(offsetPoint(c.pos, c.heading, -CAR_BODY_HALF_LEN_M), c.heading - 90, CAR_LIGHT_LATERAL_M),
-    offsetPoint(offsetPoint(c.pos, c.heading, -CAR_BODY_HALF_LEN_M), c.heading + 90, CAR_LIGHT_LATERAL_M),
-  ]);
+    display.cars && zoom >= CAR_MIN_ZOOM ? cars.filter((c) => c.pos).slice(0, CAR_CAP) : [];
+  const headlights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, CAR_BODY_HALF_LEN_M));
+  const taillights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, -CAR_BODY_HALF_LEN_M));
 
   const shownStations = getShownStations(stations, visibleLines, display);
   // Color priority for a multi-line station: prefer a line the user hasn't

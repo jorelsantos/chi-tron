@@ -202,9 +202,3 @@ export class Poller {
     this.storage.setItem(this.#ledgerKey(), JSON.stringify({ date, count }));
   }
 }
-
-/** Thin factory wrapper — `new Poller(opts)` and `createPoller(opts)` are
- * equivalent; later units can use whichever reads better at the call site. */
-export function createPoller(opts) {
-  return new Poller(opts);
-}

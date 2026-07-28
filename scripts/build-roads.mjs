@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { M_PER_DEG_LAT, mPerDegLon } from '../src/tracks.js';
+
 // One-time (re-runnable) ambient-traffic road graph builder: OpenStreetMap
 // (via the Overpass API) → public/data/roads.json. U11's car simulation
 // walks this graph at runtime; nothing here runs live.
@@ -26,9 +28,6 @@ const MAX_BYTES = 1024 * 1024; // U10 step 5 — 10x tracks.json's 95 KB.
 // |dLat| vs |dLon| (in meters, not degrees — degrees-of-longitude shrink
 // with latitude) split is the right level of complexity; a bearing-angle
 // model would be solving a problem this street grid doesn't have.
-const M_PER_DEG_LAT = 111320;
-const mPerDegLon = (lat) => 111320 * Math.cos((lat * Math.PI) / 180);
-
 function axisOf(lonA, latA, lonB, latB) {
   const dx = (lonB - lonA) * mPerDegLon((latA + latB) / 2);
   const dy = (latB - latA) * M_PER_DEG_LAT;

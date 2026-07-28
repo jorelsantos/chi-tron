@@ -11,8 +11,14 @@
 
 import { Poller, DEFAULT_DAILY_CEILING } from './poller.js';
 import { now } from './trains.js';
+import { bearingDeg, interpAtDist } from './tracks.js';
 
 const POLL_MS = 15000;
+// U16's trains.js clamp (MAX_MOCK_DT_S) gets an equivalent here — a
+// backgrounded tab/stalled frame must not let a mock bus's dt spike jump it
+// straight past a terminal bounce, the same failure mode trains.js and
+// cars.js both guard against.
+const MAX_MOCK_DT_S = 1;
 // U14 ledger namespace for this feed's key (CTA_BUS_KEY) — kept distinct
 // from trains.js's 'cta-train' so the two feeds' daily budgets never share
 // one counter (KTD10, R10).
@@ -83,43 +89,18 @@ function preparePattern(pattern) {
 }
 
 /** Distance-along-pattern (feet) -> [lon, lat]. Binary search over the
- * baked points' pdist, mirroring tracks.js's pointAtDist exactly (same
- * clamp-at-both-ends behavior), but reading a plain points array with an
- * inline `pdist` per point instead of a parallel cumDist array — that's the
- * only shape difference, since buses interpolate directly instead of
- * snapping. Returns null for a pattern with no points at all (defensive;
- * build-patterns.mjs never emits one, since it drops any pattern under 2
- * points before writing patterns.json). */
+ * baked points' pdist via tracks.js's shared interpAtDist (same
+ * clamp-at-both-ends behavior as tracks.js's own pointAtDist), reading a
+ * plain points array with an inline `pdist` per point instead of a
+ * parallel cumDist array — that's the only shape difference, since buses
+ * interpolate directly instead of snapping. Returns null for a pattern
+ * with no points at all (defensive; build-patterns.mjs never emits one,
+ * since it drops any pattern under 2 points before writing patterns.json). */
 export function interpolatePattern(pattern, pdist) {
   const { points, totalDist } = pattern;
   if (!points || points.length === 0) return null;
   if (points.length === 1) return [points[0].lon, points[0].lat];
-  const d = Math.max(0, Math.min(pdist, totalDist));
-  let lo = 0;
-  let hi = points.length - 1;
-  while (lo < hi - 1) {
-    const mid = (lo + hi) >> 1;
-    if (points[mid].pdist <= d) lo = mid;
-    else hi = mid;
-  }
-  const segLen = points[hi].pdist - points[lo].pdist;
-  const t = segLen > 0 ? (d - points[lo].pdist) / segLen : 0;
-  return [
-    points[lo].lon + t * (points[hi].lon - points[lo].lon),
-    points[lo].lat + t * (points[hi].lat - points[lo].lat),
-  ];
-}
-
-// Compass bearing (degrees, clockwise from north) from point a to point b —
-// standard flat-earth approximation, accurate well under a degree at the
-// short (tens-of-meters) distances this is used over.
-function bearingDeg([lon1, lat1], [lon2, lat2]) {
-  const rad = Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.cos(((lat1 + lat2) / 2) * rad);
-  const dLat = lat2 - lat1;
-  let deg = Math.atan2(dLon, dLat) / rad;
-  if (deg < 0) deg += 360;
-  return deg;
+  return interpAtDist(pdist, totalDist, (i) => points[i].pdist, (i) => [points[i].lon, points[i].lat], points.length);
 }
 
 // Feet to sample ahead along the pattern when deriving a bus's heading —
@@ -215,7 +196,7 @@ export class BusEngine {
   }
 
   #tickMock(bus, t) {
-    const dt = t - bus.lastTick;
+    const dt = Math.min(t - bus.lastTick, MAX_MOCK_DT_S);
     const pattern = this.patterns.get(bus.pid);
     if (!pattern) return; // shouldn't happen — seedMock only seeds buses with a resolved pattern
     bus.dist += bus.speed * bus.dirSign * dt;
@@ -293,24 +274,27 @@ export class BusEngine {
     this.buses.clear();
   }
 
-  // Two (or more) sequential 10-route-max getvehicles calls per attempt,
-  // combined into one #ingest() so the seen/stale bookkeeping below runs
-  // once per full poll against every route's result together — splitting
-  // it per-chunk would incorrectly age out buses on whichever chunk's
-  // routes didn't happen to run in that particular call.
+  // Two (or more) 10-route-max getvehicles calls per attempt, run
+  // concurrently (they're independent requests — same total call count
+  // against KTD5's cap either way, just not serialized) and combined into
+  // one #ingest() so the seen/stale bookkeeping below runs once per full
+  // poll against every route's result together — splitting it per-chunk
+  // would incorrectly age out buses on whichever chunk's routes didn't
+  // happen to run in that particular call.
   async #pollOnce() {
     const routeIds = Object.keys(this.routePids).length ? Object.keys(this.routePids) : MARQUEE_ROUTES;
-    const allVehicles = [];
-    for (const chunk of chunkRoutes(routeIds)) {
-      const res = await fetch(`/api/bus/getvehicles?rt=${chunk.join(',')}&format=json`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (isAuthError(data)) {
-        throw new Error(`CTA bus API auth error: ${data['bustime-response'].error[0]?.msg ?? 'invalid key'}`);
-      }
-      allVehicles.push(...extractVehicles(data));
-    }
-    this.ingest(allVehicles);
+    const chunks = await Promise.all(
+      chunkRoutes(routeIds).map(async (chunk) => {
+        const res = await fetch(`/api/bus/getvehicles?rt=${chunk.join(',')}&format=json`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (isAuthError(data)) {
+          throw new Error(`CTA bus API auth error: ${data['bustime-response'].error[0]?.msg ?? 'invalid key'}`);
+        }
+        return extractVehicles(data);
+      })
+    );
+    this.ingest(chunks.flat());
   }
 
   // Same translation trains.js's #handlePollStatus does: a single failed
