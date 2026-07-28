@@ -1,0 +1,24 @@
+{
+  "name": "chi-tron",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tracks": "node scripts/build-tracks.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@deck.gl/core": "^9.1.0",
+    "@deck.gl/geo-layers": "^9.1.0",
+    "@deck.gl/layers": "^9.1.0",
+    "@deck.gl/mapbox": "^9.1.0",
+    "maplibre-gl": "^5.6.0"
+  },
+  "devDependencies": {
+    "vite": "^6.3.0",
+    "vitest": "^3.2.0"
+  }
+}
