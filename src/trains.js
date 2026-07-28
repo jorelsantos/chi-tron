@@ -153,11 +153,14 @@ export class TrainEngine {
   // never calls startLive()) never instantiates a Poller at all: no timer,
   // no visibilitychange listener, no localStorage touch.
   startLive() {
+    // A fresh live session starts with a clean slate -- see buses.js's
+    // startLive() for why (code review finding).
+    this.failures = 0;
     this.poller = new Poller({
       storageKey: TRAIN_LEDGER_KEY,
       intervalMs: POLL_MS,
       ceiling: DEFAULT_DAILY_CEILING,
-      fetchFn: () => this.#pollOnce(),
+      fetchFn: (signal) => this.#pollOnce(signal),
       onStatus: (status, err) => this.#handlePollStatus(status, err),
     });
     this.poller.start();
@@ -177,8 +180,8 @@ export class TrainEngine {
     this.trains.clear();
   }
 
-  async #pollOnce() {
-    const res = await fetch(`/api/tt?rt=${ROUTES.join(',')}&outputType=JSON`);
+  async #pollOnce(signal) {
+    const res = await fetch(`/api/tt?rt=${ROUTES.join(',')}&outputType=JSON`, { signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     this.#ingest(data);

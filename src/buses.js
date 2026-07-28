@@ -61,7 +61,11 @@ export function chunkRoutes(routeIds, size = MAX_ROUTES_PER_CALL) {
  * shape. Never throws. */
 export function extractVehicles(payload) {
   const vehicles = payload?.['bustime-response']?.vehicle;
-  return Array.isArray(vehicles) ? vehicles : [];
+  if (Array.isArray(vehicles)) return vehicles;
+  // CTA's XML-derived JSON collapses a single-vehicle result to a bare
+  // object instead of a one-element array -- normalize it instead of
+  // silently discarding that bus (code review finding).
+  return vehicles ? [vehicles] : [];
 }
 
 /** True if `payload` is CTA's auth-error shape (invalid/missing key) rather
@@ -254,11 +258,23 @@ export class BusEngine {
   // ---- live mode ----------------------------------------------------------
 
   startLive() {
+    // A fresh live session starts with a clean slate: without this, one
+    // ordinary error left over from a prior LIVE stint (or a stopped feed
+    // whose failures never got reset) could immediately re-trigger the
+    // lost/auto-fallback threshold on the very next poll (code review
+    // finding).
+    this.failures = 0;
+    const routeIds = Object.keys(this.routePids).length ? Object.keys(this.routePids) : MARQUEE_ROUTES;
     this.poller = new Poller({
       storageKey: BUS_LEDGER_KEY,
       intervalMs: POLL_MS,
       ceiling: DEFAULT_DAILY_CEILING,
-      fetchFn: () => this.#pollOnce(),
+      // Each attempt fans out to one getvehicles request per 10-route
+      // chunk -- the ledger (and therefore the daily ceiling) must count
+      // real outbound requests, not attempts, or it silently understates
+      // actual CTA call volume (code review finding).
+      requestsPerCall: chunkRoutes(routeIds).length,
+      fetchFn: (signal) => this.#pollOnce(signal),
       onStatus: (status, err) => this.#handlePollStatus(status, err),
     });
     this.poller.start();
@@ -281,11 +297,11 @@ export class BusEngine {
   // poll against every route's result together — splitting it per-chunk
   // would incorrectly age out buses on whichever chunk's routes didn't
   // happen to run in that particular call.
-  async #pollOnce() {
+  async #pollOnce(signal) {
     const routeIds = Object.keys(this.routePids).length ? Object.keys(this.routePids) : MARQUEE_ROUTES;
     const chunks = await Promise.all(
       chunkRoutes(routeIds).map(async (chunk) => {
-        const res = await fetch(`/api/bus/getvehicles?rt=${chunk.join(',')}&format=json`);
+        const res = await fetch(`/api/bus/getvehicles?rt=${chunk.join(',')}&format=json`, { signal });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (isAuthError(data)) {

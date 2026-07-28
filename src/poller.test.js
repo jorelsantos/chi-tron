@@ -193,6 +193,26 @@ describe('Poller — daily ledger', () => {
     expect(poller2.getLedgerCount()).toBe(2);
   });
 
+  it('increments the ledger by requestsPerCall when one fetchFn call fans out to more than one real request', async () => {
+    vi.stubGlobal('document', makeDocument(false));
+    const storage = makeStorage();
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const poller = new Poller({
+      intervalMs: 1000,
+      storageKey: 'cta-bus',
+      ceiling: DEFAULT_DAILY_CEILING,
+      requestsPerCall: 2, // e.g. buses.js's 2 route-chunk getvehicles calls per attempt
+      fetchFn,
+      storage,
+    });
+
+    poller.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(poller.getLedgerCount()).toBe(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(poller.getLedgerCount()).toBe(4);
+  });
+
   it('never increments the ledger for a keyless feed (no storageKey), regardless of how many requests fire', async () => {
     vi.stubGlobal('document', makeDocument(false));
     const fetchFn = vi.fn().mockResolvedValue(undefined);
@@ -261,6 +281,88 @@ describe('Poller — budget ceiling / BUDGET HOLD', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(fetchFn).toHaveBeenCalledTimes(3);
     expect(onStatus).not.toHaveBeenCalledWith('hold');
+  });
+});
+
+describe('Poller — ledger write failures never wedge single-flight', () => {
+  it('recovers inFlight and keeps polling even when storage.setItem throws', async () => {
+    vi.stubGlobal('document', makeDocument(false));
+    const storage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error('QuotaExceededError');
+      },
+    };
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const onStatus = vi.fn();
+    const poller = new Poller({
+      intervalMs: 1000,
+      storageKey: 'cta-train',
+      ceiling: DEFAULT_DAILY_CEILING,
+      fetchFn,
+      onStatus,
+      storage,
+    });
+
+    poller.start(); // attempt #1: ledger write throws before fetchFn ever runs
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(onStatus).toHaveBeenLastCalledWith('error', expect.any(Error));
+
+    // A throwing ledger write must still clear inFlight via finally, so the
+    // next tick (after backoff) is not permanently skipped.
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetchFn.mock.calls.length + onStatus.mock.calls.filter((c) => c[0] === 'error').length).toBeGreaterThan(1);
+  });
+});
+
+describe('Poller — request timeout and cancellation', () => {
+  function makeAbortableFetch() {
+    return vi.fn((signal) => {
+      return new Promise((resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason ?? new Error('aborted')));
+      });
+    });
+  }
+
+  it('aborts and reports error on a request that never settles once timeoutMs elapses', async () => {
+    vi.stubGlobal('document', makeDocument(false));
+    const fetchFn = makeAbortableFetch();
+    const onStatus = vi.fn();
+    const poller = new Poller({ intervalMs: 5000, timeoutMs: 2000, fetchFn, onStatus, storage: makeStorage() });
+
+    poller.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(onStatus).not.toHaveBeenCalled(); // still hung, not yet timed out
+
+    await vi.advanceTimersByTimeAsync(2000); // timeout fires, aborts the signal
+    expect(onStatus).toHaveBeenLastCalledWith('error', expect.any(Error));
+
+    // inFlight must be released. Backoff after this failure is
+    // min(maxBackoffMs, intervalMs*2^1) = 10000ms, due at the 2000ms mark
+    // (12000ms total) -- but the timer only ticks on intervalMs' fixed
+    // 5000ms cadence, so the first tick that actually clears the backoff
+    // gate lands at 15000ms total, not 12000ms.
+    await vi.advanceTimersByTimeAsync(13000);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('stop() aborts the in-flight request, and its late rejection is not reported as a failure', async () => {
+    vi.stubGlobal('document', makeDocument(false));
+    const fetchFn = makeAbortableFetch();
+    const onStatus = vi.fn();
+    const poller = new Poller({ intervalMs: 5000, fetchFn, onStatus, storage: makeStorage() });
+
+    poller.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+
+    poller.stop();
+    await vi.advanceTimersByTimeAsync(0); // let the abort's rejection settle
+
+    expect(onStatus).not.toHaveBeenCalled(); // a deliberate stop is not an error
+    expect(poller.inFlight).toBe(false); // released, not wedged
   });
 });
 

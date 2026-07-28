@@ -31,7 +31,7 @@ function renderFeedStatus(el, state, labels) {
   // U14: 'hold' is the poll governor's BUDGET HOLD state (src/poller.js) —
   // the feed hit its self-imposed daily ceiling (R10) and has stopped
   // issuing requests until the ledger's local date rolls over.
-  el.className = `hud ${state === 'lost' ? 'lost' : state === 'hold' ? 'hold' : 'live'}`;
+  el.className = `hud ${state === 'lost' ? 'lost' : state === 'hold' ? 'hold' : state === 'disabled' ? 'disabled' : 'live'}`;
   el.textContent = labels[state] ?? labels.live;
 }
 
@@ -252,6 +252,13 @@ async function boot() {
   const engine = new TrainEngine(tracks);
   const trackKeys = Object.keys(tracks); // tracks never changes after boot — computed once, not per frame
   const visibleLines = new Set(trackKeys);
+  // U-fix #5: last stressOpacity actually written per line, so a 'normal'
+  // (or steady 'added') line settles at the value 1 once and then this
+  // frame's setFeatureState call is skipped — only a genuinely changing
+  // pulse (planned/incident's sine functions) keeps writing every frame,
+  // instead of forcing a continuous MapLibre repaint even when nothing on
+  // this layer visually changed.
+  const lastStressOpacity = new Map();
   // U12's DISPLAY toggles — buildLayers() reads trains/buses/stations;
   // buildings isn't part of the deck.gl stack so hud.js applies it straight
   // to the MapLibre style instead of routing it through this object.
@@ -435,6 +442,8 @@ async function boot() {
       for (const key of trackKeys) {
         const tag = alertsEngine.lineStatus[key] ?? 'normal';
         const opacityMult = lineStressTreatment(tag, currentTime).opacityMult;
+        if (lastStressOpacity.get(key) === opacityMult) continue;
+        lastStressOpacity.set(key, opacityMult);
         map.setFeatureState({ source: 'l-tracks', id: key }, { stressOpacity: opacityMult });
       }
     }

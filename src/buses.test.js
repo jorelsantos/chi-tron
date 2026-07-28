@@ -102,6 +102,11 @@ describe('BusEngine.ingest — no-service responses leave prior state intact', (
     expect(isAuthError(noService)).toBe(false); // a benign no-service error, not an auth failure
   });
 
+  it('normalizes a single-vehicle response (CTA collapses a 1-element result to a bare object, not an array)', () => {
+    const singleton = { 'bustime-response': { vehicle: { vid: '1', rt: '22', pid: 'p1', pdist: '50' } } };
+    expect(extractVehicles(singleton)).toEqual([{ vid: '1', rt: '22', pid: 'p1', pdist: '50' }]);
+  });
+
   it('detects an auth-key error distinctly from a benign no-service error', () => {
     const authErr = { 'bustime-response': { error: [{ msg: 'Invalid API access key supplied' }] } };
     expect(isAuthError(authErr)).toBe(true);

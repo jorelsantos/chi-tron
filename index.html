@@ -56,6 +56,10 @@
     #bus-status.live { color: #3bff6f; text-shadow: 0 0 6px rgba(59, 255, 111, 0.5); }
     #bus-status.lost { color: #ff3b4e; text-shadow: 0 0 6px rgba(255, 59, 78, 0.5); }
     #bus-status.hold { color: #ffb020; text-shadow: 0 0 6px rgba(255, 176, 32, 0.5); }
+    /* U9: patterns.json failed to load — buses are structurally off for the
+       whole session, not merely down/backing off. Dim gray reads as "not a
+       thing right now" rather than an error, distinct from live/lost/hold. */
+    #bus-status.disabled { color: rgba(140, 160, 200, 0.45); text-shadow: none; }
     #disclaimer {
       bottom: 12px; left: 50%; transform: translateX(-50%); text-align: center;
       font-size: 9px; letter-spacing: 0.14em; color: rgba(140, 160, 200, 0.4);

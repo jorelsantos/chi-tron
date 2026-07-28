@@ -69,7 +69,7 @@ export class AlertsEngine {
   startLive() {
     this.poller = new Poller({
       intervalMs: POLL_MS,
-      fetchFn: () => this.#pollOnce(),
+      fetchFn: (signal) => this.#pollOnce(signal),
       onStatus: (status, err) => this.#handlePollStatus(status, err),
     });
     this.poller.start();
@@ -79,10 +79,10 @@ export class AlertsEngine {
     this.poller?.stop();
   }
 
-  async #pollOnce() {
+  async #pollOnce(signal) {
     const [routesRes, alertsRes] = await Promise.all([
-      fetch('/api/alerts/routes.aspx?type=rail&outputType=JSON'),
-      fetch('/api/alerts/alerts.aspx?activeonly=true&accessibility=true&outputType=JSON'),
+      fetch('/api/alerts/routes.aspx?type=rail&outputType=JSON', { signal }),
+      fetch('/api/alerts/alerts.aspx?activeonly=true&accessibility=true&outputType=JSON', { signal }),
     ]);
     if (!routesRes.ok) throw new Error(`HTTP ${routesRes.status} (routes)`);
     if (!alertsRes.ok) throw new Error(`HTTP ${alertsRes.status} (alerts)`);

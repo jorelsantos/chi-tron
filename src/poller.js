@@ -50,8 +50,12 @@ export class Poller {
    *   endpoint — no ledger is read or written and the ceiling gate never
    *   trips.
    * @param {number} opts.intervalMs normal poll cadence.
-   * @param {() => Promise<any>} opts.fetchFn performs one request + ingest;
-   *   must throw/reject on any failure (network, non-2xx, malformed body).
+   * @param {(signal: AbortSignal) => Promise<any>} opts.fetchFn performs one
+   *   request + ingest; must throw/reject on any failure (network, non-2xx,
+   *   malformed body). Receives an AbortSignal that fires on `stop()` or the
+   *   per-attempt timeout -- pass it to every `fetch()` call so cancellation
+   *   actually interrupts the in-flight request instead of merely being
+   *   ignored downstream.
    * @param {(status: 'ok'|'error'|'hold', err?: Error) => void} [opts.onStatus]
    *   called after every attempt (or gated hold) with the outcome. `err` is
    *   only present on 'error'.
@@ -61,6 +65,16 @@ export class Poller {
    * @param {{getItem, setItem}} [opts.storage] defaults to global localStorage.
    * @param {() => number} [opts.now] defaults to Date.now; injectable so
    *   tests can move the ledger's calendar date without real timers.
+   * @param {number} [opts.timeoutMs] per-attempt fetch timeout (default
+   *   20000). A hung connection (accepted, never responded to) would
+   *   otherwise leave `fetchFn`'s promise pending forever, wedging
+   *   single-flight closed with no backoff (a real failure never occurs to
+   *   trigger one) — code review finding, U-fix.
+   * @param {number} [opts.requestsPerCall] real outbound HTTP requests one
+   *   `fetchFn()` call actually issues (default 1). A feed whose fetchFn
+   *   fans out to more than one real request (e.g. buses.js's per-chunk
+   *   getvehicles calls) must report this so the ledger — and therefore
+   *   the daily ceiling — tracks real request volume, not attempt count.
    */
   constructor({
     storageKey = null,
@@ -71,6 +85,8 @@ export class Poller {
     maxBackoffMs = 60000,
     storage = typeof localStorage !== 'undefined' ? localStorage : undefined,
     now = () => Date.now(),
+    timeoutMs = 20000,
+    requestsPerCall = 1,
   }) {
     this.storageKey = storageKey;
     this.intervalMs = intervalMs;
@@ -80,12 +96,15 @@ export class Poller {
     this.maxBackoffMs = maxBackoffMs;
     this.storage = storage;
     this.now = now;
+    this.timeoutMs = timeoutMs;
+    this.requestsPerCall = requestsPerCall;
 
     this.running = false;
     this.inFlight = false;
     this.consecutiveFailures = 0;
     this.nextAllowedAt = 0; // due immediately on the first tick
     this.timer = null;
+    this.controller = null; // AbortController for whichever attempt is currently in flight
   }
 
   start() {
@@ -111,6 +130,11 @@ export class Poller {
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.#onVisibility);
     }
+    // Abort whatever attempt is in flight so a late response can never apply
+    // stale data after this feed has been told to stop -- e.g. a mode switch
+    // clearing this feed's vehicles moments before an already-issued fetch
+    // resolves would otherwise resurrect them (code review finding).
+    this.controller?.abort();
   }
 
   // Current ledger count for today, per this feed's storageKey. 0 for a
@@ -157,17 +181,30 @@ export class Poller {
     // Optimistic default for the next normal-cadence request; overwritten
     // below on failure with the backoff delay instead.
     this.nextAllowedAt = this.now() + this.intervalMs;
-    this.#incrementLedger();
+    const controller = new AbortController();
+    this.controller = controller;
+    const timeoutId = setTimeout(
+      () => controller.abort(new Error(`Poller: request timed out after ${this.timeoutMs}ms`)),
+      this.timeoutMs,
+    );
     try {
-      await this.fetchFn();
+      // Ledger increment moved inside try: a throwing storage.setItem (quota
+      // exceeded, private-browsing storage disabled) must still hit the
+      // finally below and release inFlight, not deadlock single-flight
+      // forever (code review finding).
+      this.#incrementLedger();
+      await this.fetchFn(controller.signal);
       this.consecutiveFailures = 0;
       this.onStatus('ok');
     } catch (err) {
+      if (!this.running) return; // stop() aborted us deliberately -- not a real failure
       this.consecutiveFailures++;
       const backoff = Math.min(this.maxBackoffMs, this.intervalMs * 2 ** this.consecutiveFailures);
       this.nextAllowedAt = this.now() + backoff;
       this.onStatus('error', err);
     } finally {
+      clearTimeout(timeoutId);
+      if (this.controller === controller) this.controller = null;
       this.inFlight = false;
     }
   }
@@ -198,7 +235,7 @@ export class Poller {
   #incrementLedger() {
     if (!this.storageKey || !this.storage) return; // keyless feed: zero ledger cost
     const date = localDateStamp(this.now());
-    const count = this.#readLedger() + 1;
+    const count = this.#readLedger() + this.requestsPerCall;
     this.storage.setItem(this.#ledgerKey(), JSON.stringify({ date, count }));
   }
 }
