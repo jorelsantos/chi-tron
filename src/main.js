@@ -1,13 +1,14 @@
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { DARK_CITY_STYLE, FALLBACK_STYLE, CHICAGO_LOOP } from './style.js';
+import { DARK_CITY_STYLE, FALLBACK_STYLE, LOOP_PRESET } from './style.js';
 import { TrainEngine, now } from './trains.js';
 import { buildLayers, LINE_COLORS } from './layers.js';
 
 const MOCK = new URLSearchParams(location.search).has('mock');
 const statusEl = document.getElementById('status');
 const clockEl = document.getElementById('clock');
+const fpsEl = document.getElementById('fps');
 
 function setStatus(state) {
   statusEl.className = `hud ${state === 'lost' ? 'lost' : 'live'}`;
@@ -25,10 +26,14 @@ async function boot() {
   const map = new maplibregl.Map({
     container: 'map',
     style: DARK_CITY_STYLE,
-    center: CHICAGO_LOOP,
-    zoom: 13.6,
-    pitch: 57,
-    bearing: -12,
+    // U7: boot at LOOP_PRESET (not the raw CHICAGO_LOOP center) so the
+    // shipping framing — biased east for the sidebar U12 will add — is
+    // what every later unit (traffic tuning, frame budget, camera presets)
+    // tunes against from the start.
+    center: LOOP_PRESET.center,
+    zoom: LOOP_PRESET.zoom,
+    pitch: LOOP_PRESET.pitch,
+    bearing: LOOP_PRESET.bearing,
     maxPitch: 70,
     antialias: true,
     attributionControl: { compact: true },
@@ -78,9 +83,19 @@ async function boot() {
     // Re-assert the intended camera: pane layout can shift during init and
     // leave the map at a stale transform.
     map.resize();
-    map.jumpTo({ center: CHICAGO_LOOP, zoom: 13.6, pitch: 57, bearing: -12 });
+    map.jumpTo(LOOP_PRESET);
   });
 
+  // Depth/occlusion decision (U7): interleaved stays false. With it false,
+  // deck.gl composites its whole canvas over MapLibre's, so fill-extrusion
+  // buildings never occlude train glow — at 1.9x heights and pitch 60 the
+  // trails visibly glow through tower faces. Verified visually and judged
+  // to read as part of the Blade Runner aesthetic (light overpowering
+  // structure) rather than as a bug, so we keep interleaved: false rather
+  // than pay for a shared depth buffer. Revisit only if a later unit's
+  // visual gate calls the x-ray read out as a problem — switching to
+  // interleaved: true is a bigger change (shared depth buffer with every
+  // layer's `depthTest: false` in src/layers.js) with real risk to verify.
   const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
   map.addControl(overlay);
 
@@ -95,7 +110,29 @@ async function boot() {
     engine.startLive();
   }
 
+  // Rolling FPS meter — nothing in the repo measures frame rate yet, and
+  // KTD8's 30fps floor is unmeasurable without it. Exponential moving
+  // average of instantaneous per-frame rate, smoothed enough to read
+  // steadily but responsive enough to show real drops. Exposed on
+  // `window.__fps` for scripted checks, rendered in the `.hud` #fps element.
+  let lastFrameTime = performance.now();
+  let fps = 0;
+  let fpsLastPaint = lastFrameTime;
+
   function frame() {
+    const t = performance.now();
+    const dt = t - lastFrameTime;
+    lastFrameTime = t;
+    if (dt > 0) {
+      const instantFps = 1000 / dt;
+      fps = fps === 0 ? instantFps : fps + (instantFps - fps) * 0.1;
+    }
+    if (t - fpsLastPaint > 250) {
+      fpsLastPaint = t;
+      window.__fps = fps;
+      fpsEl.textContent = `${Math.round(fps)} FPS`;
+    }
+
     const trains = engine.tick();
     overlay.setProps({
       layers: buildLayers(trains, now(), visibleLines, engine.trailVersion),

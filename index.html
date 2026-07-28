@@ -36,6 +36,10 @@
     }
     #status.live { color: #3bff6f; text-shadow: 0 0 6px rgba(59, 255, 111, 0.6); }
     #status.lost { color: #ff3b4e; text-shadow: 0 0 6px rgba(255, 59, 78, 0.6); }
+    #fps {
+      top: 66px; right: 24px;
+      font-size: 10px; letter-spacing: 0.2em; color: rgba(140, 160, 200, 0.5);
+    }
     #disclaimer {
       bottom: 12px; left: 22px;
       font-size: 9px; letter-spacing: 0.14em; color: rgba(140, 160, 200, 0.4);
@@ -64,6 +68,7 @@
   <div class="hud" id="wordmark">CHI-TRON<small>CHICAGO TRANSIT GRID</small></div>
   <div class="hud" id="clock">--:--:--</div>
   <div class="hud" id="status">BOOT</div>
+  <div class="hud" id="fps">-- FPS</div>
   <div class="hud" id="disclaimer">UNOFFICIAL FAN PROJECT — NOT AFFILIATED WITH CTA</div>
   <script type="module" src="/src/main.js"></script>
 </body>
