@@ -132,3 +132,26 @@ describe('buildLayers DISPLAY toggles and station cache', () => {
     expect(b).toBeLessThan(100);
   });
 });
+
+describe('buildLayers car layer (U11)', () => {
+  const visibleLines = new Set(['Red']);
+  const cars = [{ pos: [-87.6, 41.9], heading: 90 }];
+
+  it('renders car bodies and lights at/above the configured minimum zoom', () => {
+    const layers = buildLayers([], 0, visibleLines, { cars, zoom: 14, display: { cars: true } });
+    expect(layerById(layers, 'car-bodies').props.data.length).toBe(1);
+    expect(layerById(layers, 'car-headlights').props.data.length).toBe(2); // a headlight pair per car
+    expect(layerById(layers, 'car-taillights').props.data.length).toBe(2);
+  });
+
+  it('renders nothing below the configured minimum zoom, even with display.cars on', () => {
+    const layers = buildLayers([], 0, visibleLines, { cars, zoom: 13.9, display: { cars: true } });
+    expect(layerById(layers, 'car-bodies').props.data.length).toBe(0);
+    expect(layerById(layers, 'car-headlights').props.data.length).toBe(0);
+  });
+
+  it('renders nothing when display.cars is false, regardless of zoom', () => {
+    const layers = buildLayers([], 0, visibleLines, { cars, zoom: 16, display: { cars: false } });
+    expect(layerById(layers, 'car-bodies').props.data.length).toBe(0);
+  });
+});

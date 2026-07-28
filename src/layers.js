@@ -74,6 +74,22 @@ const BUS_CAPSULE_WIDTH_M = 5;
 // quieter).
 const BUS_TRAIL_LENGTH = 18;
 
+// U11 (KTD2, KTD8): cars are the smallest, quietest vehicle — a dark body
+// legible only by its lights, so headline direction reads from the
+// amber-headlight / red-taillight pair rather than from body color. Zoomed
+// out past CAR_MIN_ZOOM the graph itself would start reading as a visible
+// rectangle (scripts/build-roads.mjs's bbox is sized against exactly this
+// zoom, not the whole city) — fading the layer out there, rather than at
+// CITY_PRESET's zoom, is what keeps that boundary from ever being on screen.
+const CAR_MIN_ZOOM = 14;
+const CAR_CAP_RENDER = 220; // mirrors cars.js's CAR_CAP — engine already caps count, this only bounds a defensive slice
+const CAR_BODY_HALF_LEN_M = 2.2;
+const CAR_BODY_WIDTH_M = 1.7;
+const CAR_LIGHT_LATERAL_M = 0.8; // half the headlight/taillight pair's spacing
+const CAR_BODY_COLOR = [18, 18, 22];
+const CAR_HEADLIGHT_COLOR = [255, 190, 90];
+const CAR_TAILLIGHT_COLOR = [220, 35, 35];
+
 const M_PER_DEG_LAT_L = 111320;
 
 // Offsets `[lon, lat]` by `meters` along compass bearing `headingDeg`
@@ -144,10 +160,12 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   const {
     trailVersion = 0,
     stations = {},
-    display = { trains: true, stations: true, buses: true },
+    display = { trains: true, stations: true, buses: true, cars: true },
     buses = [],
     busTrailVersion = 0,
     viewportCenter = [0, 0],
+    cars = [],
+    zoom = 0,
   } = options;
 
   // U12's DISPLAY toggles: `trains`/`stations` off means "don't draw this
@@ -168,6 +186,20 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   const shownBuses = display.buses
     ? capBuses(buses.filter((b) => b.pos && b.state !== 'removed'), viewportCenter, BUS_CAP)
     : [];
+
+  // U11: off = empty array below the fade zoom too, same "off = empty data"
+  // convention as every other feed — not a conditionally-omitted layer, so
+  // the layer count never changes frame to frame.
+  const shownCars =
+    display.cars && zoom >= CAR_MIN_ZOOM ? cars.filter((c) => c.pos).slice(0, CAR_CAP_RENDER) : [];
+  const headlights = shownCars.flatMap((c) => [
+    offsetPoint(offsetPoint(c.pos, c.heading, CAR_BODY_HALF_LEN_M), c.heading - 90, CAR_LIGHT_LATERAL_M),
+    offsetPoint(offsetPoint(c.pos, c.heading, CAR_BODY_HALF_LEN_M), c.heading + 90, CAR_LIGHT_LATERAL_M),
+  ]);
+  const taillights = shownCars.flatMap((c) => [
+    offsetPoint(offsetPoint(c.pos, c.heading, -CAR_BODY_HALF_LEN_M), c.heading - 90, CAR_LIGHT_LATERAL_M),
+    offsetPoint(offsetPoint(c.pos, c.heading, -CAR_BODY_HALF_LEN_M), c.heading + 90, CAR_LIGHT_LATERAL_M),
+  ]);
 
   const shownStations = getShownStations(stations, visibleLines, display);
   // Color priority for a multi-line station: prefer a line the user hasn't
@@ -249,6 +281,43 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       capRounded: true,
       jointRounded: true,
       updateTriggers: { getPath: busTrailVersion },
+      parameters: { depthTest: false },
+    }),
+    // U11: ambient traffic — dark bodies so the amber/red light pairs (not
+    // body color) carry the travel-direction read. Placed before the
+    // transit glow stack below so trains/buses render on top of it.
+    new PathLayer({
+      id: 'car-bodies',
+      data: shownCars,
+      getPath: (d) => [
+        offsetPoint(d.pos, d.heading, -CAR_BODY_HALF_LEN_M),
+        offsetPoint(d.pos, d.heading, CAR_BODY_HALF_LEN_M),
+      ],
+      getColor: [...CAR_BODY_COLOR, 235],
+      getWidth: CAR_BODY_WIDTH_M,
+      widthUnits: 'meters',
+      widthMinPixels: 2,
+      capRounded: true,
+      parameters: { depthTest: false },
+    }),
+    new ScatterplotLayer({
+      id: 'car-headlights',
+      data: headlights,
+      getPosition: (d) => d,
+      getFillColor: [...CAR_HEADLIGHT_COLOR, 235],
+      getRadius: 1.1,
+      radiusUnits: 'meters',
+      radiusMinPixels: 1.4,
+      parameters: { depthTest: false },
+    }),
+    new ScatterplotLayer({
+      id: 'car-taillights',
+      data: taillights,
+      getPosition: (d) => d,
+      getFillColor: [...CAR_TAILLIGHT_COLOR, 200],
+      getRadius: 1,
+      radiusUnits: 'meters',
+      radiusMinPixels: 1.2,
       parameters: { depthTest: false },
     }),
     // wide halo

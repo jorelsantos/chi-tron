@@ -36,6 +36,16 @@ const MOCK_FLAG_REROLL_MAX_S = 30;
 const MOCK_DELAY_CHANCE = 0.1;
 const MOCK_APPROACH_CHANCE = 0.1;
 
+// U11's car simulation needed this same clamp for its own frozen/thawed
+// off-viewport cars and flagged that #tickMock has the identical unclamped
+// shape: a tab backgrounded (or just a long stall between frames) leaves
+// `now()` still advancing via performance.now(), so the next frame's dt
+// would cover the whole gap and jump a mock train's `dist` by
+// speed*dt — far enough to blow past a terminal bounce or land off-track
+// before the next poll/tick corrects it. Live mode doesn't need this: its
+// ease-toward-target rate is already clamped to 1 regardless of dt.
+const MAX_MOCK_DT_S = 1;
+
 export class TrainEngine {
   constructor(tracksData) {
     this.lines = {};
@@ -69,7 +79,7 @@ export class TrainEngine {
   }
 
   #tickMock(train, t) {
-    const dt = t - train.lastTick;
+    const dt = Math.min(t - train.lastTick, MAX_MOCK_DT_S);
     train.dist += train.speed * train.dirSign * dt;
     const line = this.lines[train.line];
     if (train.dist >= line.totalDist || train.dist <= 0) {

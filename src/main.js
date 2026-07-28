@@ -4,6 +4,7 @@ import { MapboxOverlay } from '@deck.gl/mapbox';
 import { DARK_CITY_STYLE, FALLBACK_STYLE, LOOP_PRESET } from './style.js';
 import { TrainEngine, now } from './trains.js';
 import { BusEngine } from './buses.js';
+import { CarEngine } from './cars.js';
 import { buildLayers, LINE_COLORS, rgbString } from './layers.js';
 import { createHud } from './hud.js';
 
@@ -96,6 +97,21 @@ async function boot() {
     .catch((err) => {
       console.warn('[chi-tron] patterns.json failed to load, buses disabled:', err.message);
       setBusStatus('disabled');
+    });
+
+  // U11: cars have no live feed in either mode (they're simulated always),
+  // so there's no status indicator to wire up here — only presence/absence.
+  // Same guarded, non-blocking fetch pattern as patterns.json above: a
+  // missing/failed roads.json disables only the car layer.
+  let carEngine = null;
+  fetch('/data/roads.json')
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    .then((roadsData) => {
+      carEngine = new CarEngine(roadsData);
+      carEngine.seed();
+    })
+    .catch((err) => {
+      console.warn('[chi-tron] roads.json failed to load, cars disabled:', err.message);
     });
 
   const map = new maplibregl.Map({
@@ -215,7 +231,7 @@ async function boot() {
   // U12's DISPLAY toggles — buildLayers() reads trains/buses/stations;
   // buildings isn't part of the deck.gl stack so hud.js applies it straight
   // to the MapLibre style instead of routing it through this object.
-  const display = { trains: true, buses: true, buildings: true, stations: true };
+  const display = { trains: true, buses: true, cars: true, buildings: true, stations: true };
 
   // U12: instrument sidebar + telemetry/compass chrome. Owns the LINES and
   // DISPLAY toggle DOM; mutates `visibleLines` and `display` in place so
@@ -261,11 +277,17 @@ async function boot() {
     }
 
     const trains = engine.tick();
-    // busEngine is null until patterns.json resolves (or forever, if it
-    // failed to load — see the guarded fetch above); an empty array here
-    // keeps buildLayers()'s "off = empty data, not an omitted layer"
-    // convention intact rather than needing a special no-bus-engine branch.
+    // busEngine/carEngine are null until their build artifact resolves (or
+    // forever, if it failed to load — see the guarded fetches above); an
+    // empty array here keeps buildLayers()'s "off = empty data, not an
+    // omitted layer" convention intact rather than needing a special
+    // no-engine branch per feed.
     const buses = busEngine ? busEngine.tick() : [];
+    // U11: bounds gates which cars get updated at all (frozen off-viewport,
+    // per the plan's viewport-culling requirement) — anything exposing
+    // .contains([lon,lat]) works, and map.getBounds() already does (same
+    // duck-typed use hud.js's own cachedBounds.contains() makes).
+    const cars = carEngine ? carEngine.tick(now(), map.getBounds()) : [];
     hud.tick(trains);
     const center = map.getCenter();
     overlay.setProps({
@@ -276,6 +298,8 @@ async function boot() {
         buses,
         busTrailVersion: busEngine?.trailVersion ?? 0,
         viewportCenter: [center.lng, center.lat],
+        cars,
+        zoom: map.getZoom(),
       }),
     });
     requestAnimationFrame(frame);
@@ -287,6 +311,7 @@ async function boot() {
   window.__engine = engine;
   window.__hud = hud;
   window.__busEngine = () => busEngine; // a getter, since busEngine is reassigned once patterns.json resolves
+  window.__carEngine = () => carEngine; // same shape, for roads.json
 }
 
 boot();

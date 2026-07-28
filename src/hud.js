@@ -14,9 +14,11 @@
 //     Set. Buildings aren't part of the deck.gl layer stack, so that toggle
 //     is applied directly to the MapLibre style here instead.
 //
-// Only trains/buildings/stations exist as feeds today (see the neon-city
-// plan's Phase B for buses/cars/alerts) — this module deliberately does not
-// build toggles or status rows for anything that doesn't render yet.
+// Trains, buses (U9) and cars (U11) all read `display` the same way inside
+// buildLayers() — this module doesn't special-case any of them beyond the
+// buildings side effect below. Alerts (see the neon-city plan) still have no
+// toggle here; this module deliberately does not build one for a feed that
+// doesn't render yet.
 
 import { LOOP_PRESET, CITY_PRESET } from './style.js';
 import { LINE_KEYS, rgbString } from './layers.js';
@@ -36,6 +38,7 @@ const BUILDING_LAYER_IDS = ['buildings-3d', 'buildings-3d-crown'];
 const DISPLAY_TOGGLES = [
   { key: 'trains', label: 'Trains' },
   { key: 'buses', label: 'Buses' }, // U9
+  { key: 'cars', label: 'Cars' }, // U11
   { key: 'buildings', label: 'Buildings' },
   { key: 'stations', label: 'Stations' },
 ];
