@@ -11,52 +11,7 @@
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; background: #05060a; overflow: hidden; }
-    /* City vibe compare: classic cyberpunk | magenta night.
-       Panes + canvases must be height:100% or MapLibre draws black. */
-    #map-split {
-      position: absolute; inset: 0;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      width: 100%;
-      height: 100%;
-    }
-    .map-pane {
-      position: relative;
-      min-width: 0;
-      min-height: 0;
-      height: 100%;
-      border-right: 1px solid rgba(0, 212, 255, 0.18);
-    }
-    .map-pane:last-child { border-right: none; }
-    .map-canvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-    }
-    .pane-label {
-      position: absolute; z-index: 12; top: 12px; left: 50%; transform: translateX(-50%);
-      pointer-events: none;
-      font-family: "SF Mono", "Menlo", monospace;
-      font-size: 11px; letter-spacing: 0.22em;
-      color: rgba(0, 212, 255, 0.9);
-      text-shadow: 0 0 10px rgba(0, 212, 255, 0.55);
-      background: rgba(4, 6, 13, 0.72);
-      border: 1px solid rgba(0, 212, 255, 0.28);
-      border-radius: 6px;
-      padding: 6px 12px;
-      white-space: nowrap;
-    }
-    .map-pane.magenta .pane-label {
-      color: rgba(255, 120, 200, 0.95);
-      text-shadow: 0 0 10px rgba(255, 80, 180, 0.5);
-      border-color: rgba(255, 100, 190, 0.35);
-    }
-    .map-pane.wet .pane-label {
-      color: rgba(200, 140, 190, 0.92);
-      text-shadow: 0 0 12px rgba(120, 40, 100, 0.55);
-      border-color: rgba(140, 80, 130, 0.4);
-    }
+    #map { position: absolute; inset: 0; width: 100%; height: 100%; }
 
     /* HUD chrome — never intercepts map interaction */
     .hud { position: absolute; z-index: 10; pointer-events: none; font-family: "SF Mono", "Menlo", monospace; }
@@ -318,16 +273,7 @@
   </style>
 </head>
 <body>
-  <div id="map-split">
-    <div class="map-pane magenta">
-      <div class="pane-label">MAGENTA NIGHT · edgerunners energy</div>
-      <div class="map-canvas" id="map-magenta"></div>
-    </div>
-    <div class="map-pane wet">
-      <div class="pane-label">WET MAGENTA · rain · weight · noir</div>
-      <div class="map-canvas" id="map-wet"></div>
-    </div>
-  </div>
+  <div id="map"></div>
   <div id="scanlines"></div>
   <div id="vignette"></div>
   <div class="hud" id="wordmark">CHI-TRON<small>CHICAGO TRANSIT GRID</small></div>
