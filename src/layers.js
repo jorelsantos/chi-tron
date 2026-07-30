@@ -11,27 +11,27 @@ import { capBuses } from './buses.js';
 import { CAR_CAP } from './cars.js';
 import { mPerDegLon, M_PER_DEG_LAT } from './tracks.js';
 
-// U8: pushed past the literal CTA palette toward saturated neon (R2), and
-// away from the amber/orange building-crown hue src/style.js adds in U7
-// (crown ranges roughly hue 25°, e.g. #c4590f). Brn in particular used to
-// sit at hue ~30° — nearly on top of the crown and only 4° from Org — so it
-// moves to a yellow-green gold instead of a literal "brown," which doesn't
-// exist as a vivid neon hue anyway. Org stays in the orange family (it's
-// the Orange Line) but shifts redder/hotter and far more saturated than the
-// crown's muted max (crown: ~86% sat/41% light at its brightest vs Org's
-// 100%/53%) so the two still read apart despite the residual ~7° hue gap —
-// the crown is also a small static rooftop highlight while Org is a long
-// animated glowing line, which does a lot of the separating work on its own.
-// All eight hues are now spread with a minimum ~28° gap around the wheel.
+// Neon palette anchored to official CTA brand colors (transitchicago.com
+// developers/branding, 2026) then boosted for cyberpunk readability on a
+// near-black stage. Official RGB → neon:
+//   Red    #c60c30 (227,25,55)   → hot neon red
+//   Blue   #00a1de (0,157,220)   → ice cyan-blue
+//   Brown  #62361b (118,66,0)    → copper-bronze (NOT chartreuse; that was a bug)
+//   Green  #009b3a (0,169,79)    → electric green
+//   Orange #f47836 (244,120,54)  → hot mango orange
+//   Purple #522398 (73,47,146)   → vivid violet
+//   Pink   #e27ea6 (243,139,185) → hot pink
+//   Yellow (Skokie Swift gold)   → light amber-gold (lighter orange family,
+//                                  not pure lemon — distinguishable from Brown copper)
 export const LINE_COLORS = {
-  Red: [249, 31, 68],
-  Blue: [26, 198, 255],
-  Brn: [175, 244, 37],
-  G: [21, 249, 78],
-  Org: [255, 87, 15],
-  P: [137, 56, 250],
-  Pink: [255, 51, 180],
-  Y: [255, 217, 26],
+  Red: [255, 45, 72],
+  Blue: [0, 196, 255],
+  Brn: [210, 118, 48], // copper-brown — reads "Brown Line," not Yellow
+  G: [20, 230, 95],
+  Org: [255, 105, 28], // hot orange — distinct from Brown copper + Yellow gold
+  P: [155, 78, 255],
+  Pink: [255, 90, 185],
+  Y: [255, 200, 70], // light amber / pale orange-gold (Skokie Swift energy)
 };
 
 // Single source for "the 8 L lines, in a stable order" — hud.js, the vitest
@@ -49,7 +49,8 @@ export function rgbString(color) {
 
 // Aesthetic Tron pulses use a short bolt trail (matches PulseEngine.PULSE_TRAIL_SECONDS).
 // Live vehicle trains (dormant this pass) used ~45s; keep pulse-first.
-const TRAIL_LENGTH = 8;
+// Keep in sync with PulseEngine.PULSE_TRAIL_SECONDS — short bolts at high speed.
+const TRAIL_LENGTH = 5.5;
 
 // U9 (R4, KTD12): buses read as a cool ice-blue/silver capsule against the
 // trains' saturated line-color-plus-hot-white-core treatment. Hue ~225°
@@ -265,8 +266,8 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       fadeTrail: true,
       capRounded: true,
       jointRounded: true,
-      widthMinPixels: 5,
-      widthMaxPixels: 14,
+      widthMinPixels: 6,
+      widthMaxPixels: 18,
       opacity: 1,
       updateTriggers: { getPath: trailVersion, getTimestamps: trailVersion },
       // R3: additive so two trails crossing sum brightness — light-cycle look.
@@ -371,8 +372,7 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       radiusMinPixels: 1.2,
       parameters: { depthTest: false },
     }),
-    // Pulse core: tight hot white + soft line-colored halo (not the old
-    // three-disc train head stack). Pickable for optional follow.
+    // Pulse core: saturated line-color bloom + white-hot center.
     new ScatterplotLayer({
       id: 'glow-halo',
       data: shownStyled,
@@ -380,21 +380,34 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       getPosition: (d) => d.t.pos,
       getFillColor: (d) => [
         ...(d.stress.color ?? LINE_COLORS[d.t.line]),
-        55 * d.style.fade * d.stress.opacityMult,
+        95 * d.style.fade * d.stress.opacityMult,
       ],
-      getRadius: () => 90,
+      getRadius: () => 140,
       radiusUnits: 'meters',
-      radiusMinPixels: 8,
+      radiusMinPixels: 12,
+      parameters: { depthTest: false },
+    }),
+    new ScatterplotLayer({
+      id: 'glow-mid',
+      data: shownStyled,
+      getPosition: (d) => d.t.pos,
+      getFillColor: (d) => [
+        ...(d.stress.color ?? LINE_COLORS[d.t.line]),
+        180 * d.style.fade * d.stress.opacityMult,
+      ],
+      getRadius: () => 55,
+      radiusUnits: 'meters',
+      radiusMinPixels: 6,
       parameters: { depthTest: false },
     }),
     new ScatterplotLayer({
       id: 'glow-core',
       data: shownStyled,
       getPosition: (d) => d.t.pos,
-      getFillColor: () => [255, 255, 255, 245],
-      getRadius: () => 18,
+      getFillColor: () => [255, 255, 255, 255],
+      getRadius: () => 22,
       radiusUnits: 'meters',
-      radiusMinPixels: 3,
+      radiusMinPixels: 4,
       parameters: { depthTest: false },
     }),
     // Station layers intentionally empty this pass (shownStations = []).

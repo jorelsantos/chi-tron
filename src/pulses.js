@@ -8,11 +8,11 @@ export function now() {
   return performance.now() / 1000;
 }
 
-// Fast data-light, not L mph (KTD4). ~20–30 s for a full Red run so the
-// bolt trail stays legible at CITY zoom while still reading as energy.
-export const PULSE_SPEED_MIN = 1200; // m/s
-export const PULSE_SPEED_MAX = 1800;
-export const PULSE_TRAIL_SECONDS = 8;
+// Bustling-city energy: ~10–14 s for a full Red run. Trails stay short so
+// the map reads as many fast bolts, not long snakes.
+export const PULSE_SPEED_MIN = 2800; // m/s
+export const PULSE_SPEED_MAX = 4000;
+export const PULSE_TRAIL_SECONDS = 5.5;
 export const MAX_PULSE_DT_S = 0.05; // hard clamp: large stalls don't teleport
 
 /**
