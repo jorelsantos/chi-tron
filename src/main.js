@@ -136,6 +136,17 @@ async function boot() {
   // Primary map for HUD camera / follow (left pane).
   const map = mapTip;
 
+  function resizeBoth() {
+    mapTip.resize();
+    mapJunc.resize();
+  }
+
+  // Observe panes (real layout height), not only map containers — a 0-height
+  // container never fires useful resizes. Also force after next paint so CSS
+  // grid has settled before MapLibre samples client dimensions.
+  for (const pane of document.querySelectorAll('.map-pane')) {
+    new ResizeObserver(resizeBoth).observe(pane);
+  }
   for (const m of [mapTip, mapJunc]) {
     new ResizeObserver(() => m.resize()).observe(m.getContainer());
     m.on('error', (e) => {
@@ -147,6 +158,7 @@ async function boot() {
       }
     });
   }
+  requestAnimationFrame(() => requestAnimationFrame(resizeBoth));
 
   // Neon under-glow of the full network — applied to each compare pane.
   const TRACK_GLOW_LAYER_IDS = ['l-tracks-wide', 'l-tracks-mid', 'l-tracks-core'];
@@ -201,7 +213,7 @@ async function boot() {
   }
   function onMapReady(m) {
     addTrackUnderglow(m);
-    m.resize();
+    resizeBoth();
     m.jumpTo(LOOP_PRESET);
   }
   mapTip.on('load', () => onMapReady(mapTip));
