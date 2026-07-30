@@ -8,11 +8,10 @@ export function now() {
   return performance.now() / 1000;
 }
 
-// Bustling-city energy: ~10–14 s for a full Red run. Trails stay short so
-// the map reads as many fast bolts, not long snakes.
-export const PULSE_SPEED_MIN = 2800; // m/s
-export const PULSE_SPEED_MAX = 4000;
-export const PULSE_TRAIL_SECONDS = 5.5;
+// ~20–30 s for a full Red run — readable energy, not a strobe.
+export const PULSE_SPEED_MIN = 1200; // m/s
+export const PULSE_SPEED_MAX = 1800;
+export const PULSE_TRAIL_SECONDS = 8;
 export const MAX_PULSE_DT_S = 0.05; // hard clamp: large stalls don't teleport
 
 /**
@@ -30,7 +29,7 @@ export class PulseEngine {
   }
 
   /** @param {number} perLine how many pulses to seed per line key */
-  seed(perLine = 2) {
+  seed(perLine = 3) {
     this.pulses.clear();
     for (const key of Object.keys(this.lines)) {
       const line = this.lines[key];
@@ -39,11 +38,12 @@ export class PulseEngine {
         const id = `pulse-${key}-${i}`;
         const speed =
           PULSE_SPEED_MIN + Math.random() * (PULSE_SPEED_MAX - PULSE_SPEED_MIN);
+        // Even spacing along the line so bolts stay separated (not clustered).
         this.pulses.set(id, {
           id,
           line: key,
           state: 'tracking',
-          dist: ((i + 0.35) / perLine) * line.totalDist,
+          dist: ((i + 0.5) / perLine) * line.totalDist,
           dirSign: i % 2 === 0 ? 1 : -1,
           speed,
           lastTick: now(),

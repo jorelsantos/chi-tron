@@ -49,8 +49,8 @@ export function rgbString(color) {
 
 // Aesthetic Tron pulses use a short bolt trail (matches PulseEngine.PULSE_TRAIL_SECONDS).
 // Live vehicle trains (dormant this pass) used ~45s; keep pulse-first.
-// Keep in sync with PulseEngine.PULSE_TRAIL_SECONDS — short bolts at high speed.
-const TRAIL_LENGTH = 5.5;
+// Keep in sync with PulseEngine.PULSE_TRAIL_SECONDS.
+const TRAIL_LENGTH = 8;
 
 // U9 (R4, KTD12): buses read as a cool ice-blue/silver capsule against the
 // trains' saturated line-color-plus-hot-white-core treatment. Hue ~225°
@@ -266,9 +266,9 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       fadeTrail: true,
       capRounded: true,
       jointRounded: true,
-      widthMinPixels: 6,
-      widthMaxPixels: 18,
-      opacity: 1,
+      widthMinPixels: 4,
+      widthMaxPixels: 12,
+      opacity: 0.9,
       updateTriggers: { getPath: trailVersion, getTimestamps: trailVersion },
       // R3: additive so two trails crossing sum brightness — light-cycle look.
       parameters: {
@@ -372,7 +372,7 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       radiusMinPixels: 1.2,
       parameters: { depthTest: false },
     }),
-    // Pulse core: saturated line-color bloom + white-hot center.
+    // Pulse core: soft line-color halo + white hot center (dialed back).
     new ScatterplotLayer({
       id: 'glow-halo',
       data: shownStyled,
@@ -380,34 +380,21 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       getPosition: (d) => d.t.pos,
       getFillColor: (d) => [
         ...(d.stress.color ?? LINE_COLORS[d.t.line]),
-        95 * d.style.fade * d.stress.opacityMult,
+        50 * d.style.fade * d.stress.opacityMult,
       ],
-      getRadius: () => 140,
+      getRadius: () => 90,
       radiusUnits: 'meters',
-      radiusMinPixels: 12,
-      parameters: { depthTest: false },
-    }),
-    new ScatterplotLayer({
-      id: 'glow-mid',
-      data: shownStyled,
-      getPosition: (d) => d.t.pos,
-      getFillColor: (d) => [
-        ...(d.stress.color ?? LINE_COLORS[d.t.line]),
-        180 * d.style.fade * d.stress.opacityMult,
-      ],
-      getRadius: () => 55,
-      radiusUnits: 'meters',
-      radiusMinPixels: 6,
+      radiusMinPixels: 8,
       parameters: { depthTest: false },
     }),
     new ScatterplotLayer({
       id: 'glow-core',
       data: shownStyled,
       getPosition: (d) => d.t.pos,
-      getFillColor: () => [255, 255, 255, 255],
-      getRadius: () => 22,
+      getFillColor: () => [255, 255, 255, 230],
+      getRadius: () => 16,
       radiusUnits: 'meters',
-      radiusMinPixels: 4,
+      radiusMinPixels: 3,
       parameters: { depthTest: false },
     }),
     // Station layers intentionally empty this pass (shownStations = []).

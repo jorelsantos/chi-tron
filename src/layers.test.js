@@ -140,7 +140,7 @@ describe('buildLayers picking scope (U17)', () => {
   it('enables pickable on vehicle layers, not trail/station layers', () => {
     const layers = buildLayers([], 0, new Set(['Red']), {});
     const pickableIds = ['glow-halo', 'bus-capsules', 'car-bodies'];
-    const notPickableIds = ['trails', 'bus-trails', 'glow-mid', 'glow-core', 'station-halo', 'station-ring'];
+    const notPickableIds = ['trails', 'bus-trails', 'glow-core', 'station-halo', 'station-ring'];
     for (const id of pickableIds) {
       expect(layerById(layers, id).props.pickable).toBe(true);
     }

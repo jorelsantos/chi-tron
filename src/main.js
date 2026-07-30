@@ -187,9 +187,9 @@ async function boot() {
       source: 'l-tracks',
       paint: {
         'line-color': ['get', 'color'],
-        'line-opacity': ['*', 0.32, stressOpacity],
-        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 8, 16, 22],
-        'line-blur': 4.5,
+        'line-opacity': ['*', 0.18, stressOpacity],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 5, 16, 14],
+        'line-blur': 3,
       },
     });
     // Mid pass — softens the step between the wide halo and the hairline
@@ -200,9 +200,9 @@ async function boot() {
       source: 'l-tracks',
       paint: {
         'line-color': ['get', 'color'],
-        'line-opacity': ['*', 0.72, stressOpacity],
-        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 3.2, 16, 8],
-        'line-blur': 1.5,
+        'line-opacity': ['*', 0.45, stressOpacity],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2, 16, 5],
+        'line-blur': 1,
       },
     });
     // Hairline bright core — the actual "line" a viewer's eye follows.
@@ -214,8 +214,8 @@ async function boot() {
       source: 'l-tracks',
       paint: {
         'line-color': ['get', 'color'],
-        'line-opacity': ['*', 1.0, stressOpacity],
-        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1.0, 16, 2.4],
+        'line-opacity': ['*', 0.92, stressOpacity],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.7, 16, 1.8],
       },
     });
   }
@@ -300,8 +300,8 @@ async function boot() {
   overlay.setProps({ onClick: handleVehicleClick });
 
   engine.onStatus = setStatus;
-  // Dense pulse field — bustling city energy (5 bolts per line).
-  engine.seed(5);
+  // 3 evenly spaced pulses per line.
+  engine.seed(3);
   setStatus('mock');
 
   // U15: no EXPLORE/LIVE split here — the High-Level Technical Design's
