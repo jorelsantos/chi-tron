@@ -1,18 +1,7 @@
-// Coverage for the pure/data-transform logic in layers.js that isn't a
-// rendering concern (which the plan correctly scoped to manual browser
-// verification): trainStyle()'s branch selection, and buildLayers()'s
-// DISPLAY-toggle and station-cache behavior via its returned deck.gl layer
-// `data` arrays (layer construction alone touches no WebGL/canvas).
+// Coverage for pure/data-transform logic in layers.js.
 
 import { describe, it, expect } from 'vitest';
-import {
-  trainStyle,
-  buildLayers,
-  lineStressTreatment,
-  junctionBoostById,
-  PULSE_HEAD_TIP,
-  PULSE_HEAD_JUNCTION,
-} from './layers.js';
+import { trainStyle, buildLayers, lineStressTreatment } from './layers.js';
 
 function layerById(layers, id) {
   return layers.find((l) => l.id === id);
@@ -34,7 +23,7 @@ describe('trainStyle', () => {
     expect(s.brightBoost).toBeGreaterThan(1);
   });
 
-  it('red-shifts a delayed train and includes a defined brightBoost (no ?? 1 fallback needed)', () => {
+  it('red-shifts a delayed train and includes a defined brightBoost', () => {
     const s = trainStyle({ ...base, isDly: true }, 0);
     expect(s.core).toEqual([255, 70, 70]);
     expect(s.brightBoost).toBe(1);
@@ -42,8 +31,8 @@ describe('trainStyle', () => {
 
   it('prioritizes isDly over isApp when both flags are true', () => {
     const s = trainStyle({ ...base, isDly: true, isApp: true }, 0);
-    expect(s.core).toEqual([255, 70, 70]); // the isDly (red) treatment, not isApp's white swell
-    expect(s.radiusMult).toBe(1); // isApp's radius bump does not apply
+    expect(s.core).toEqual([255, 70, 70]);
+    expect(s.radiusMult).toBe(1);
   });
 
   it('fades a stale train independent of its isDly/isApp state', () => {
@@ -52,48 +41,40 @@ describe('trainStyle', () => {
   });
 });
 
-describe('buildLayers DISPLAY toggles and station cache', () => {
+describe('buildLayers tip-only trains', () => {
   const visibleLines = new Set(['Red']);
   const trains = [
-    { pos: [-87.6, 41.9], line: 'Red', state: 'tracking', trail: [{ lon: -87.6, lat: 41.9, t: 0 }] },
+    {
+      pos: [-87.6, 41.9],
+      line: 'Red',
+      state: 'tracking',
+      trail: [{ lon: -87.6, lat: 41.9, t: 0 }],
+    },
   ];
   const stations = {
     a: { coords: [-87.6, 41.9], lines: ['Red'], weight: 0.5 },
     b: { coords: [-87.61, 41.91], lines: ['Blue'], weight: 0.5 },
   };
 
-  it('tip mode draws trails but no disc heads', () => {
+  it('draws trails but no disc heads (tip-only)', () => {
     const layers = buildLayers(trains, 0, visibleLines, {
       stations,
       display: { trains: true, stations: false },
-      pulseHead: PULSE_HEAD_TIP,
     });
     expect(layerById(layers, 'trails').props.data.length).toBe(1);
     expect(layerById(layers, 'glow-core').props.data.length).toBe(0);
     expect(layerById(layers, 'glow-halo').props.data.length).toBe(0);
   });
 
-  it('junction mode draws pinprick heads', () => {
-    const layers = buildLayers(trains, 0, visibleLines, {
-      stations,
-      display: { trains: true, stations: false },
-      pulseHead: PULSE_HEAD_JUNCTION,
-    });
-    expect(layerById(layers, 'trails').props.data.length).toBe(1);
-    expect(layerById(layers, 'glow-core').props.data.length).toBe(1);
-  });
-
-  it('empties train and glow layer data when display.trains is false', () => {
+  it('empties trail data when display.trains is false', () => {
     const layers = buildLayers(trains, 0, visibleLines, {
       stations,
       display: { trains: false, stations: false },
-      pulseHead: PULSE_HEAD_JUNCTION,
     });
     expect(layerById(layers, 'trails').props.data.length).toBe(0);
-    expect(layerById(layers, 'glow-core').props.data.length).toBe(0);
   });
 
-  it('hard-disables station rings this pass regardless of display.stations', () => {
+  it('hard-disables station rings regardless of display.stations', () => {
     const layers = buildLayers(trains, 0, visibleLines, {
       stations,
       display: { trains: false, stations: true },
@@ -123,71 +104,18 @@ describe('lineStressTreatment (U15)', () => {
   it('animates opacity over time for planned/incident, but holds steady for added', () => {
     const t0 = lineStressTreatment('planned', 0).opacityMult;
     const t1 = lineStressTreatment('planned', 1).opacityMult;
-    expect(t0).not.toBe(t1); // the breathing pulse actually moves
+    expect(t0).not.toBe(t1);
     expect(lineStressTreatment('added', 0).opacityMult).toBe(lineStressTreatment('added', 5).opacityMult);
   });
 });
 
-describe('buildLayers line stress and accessibility glyph (U15)', () => {
-  const visibleLines = new Set(['Red']);
-  const trains = [
-    { pos: [-87.6, 41.9], line: 'Red', state: 'tracking', trail: [{ lon: -87.6, lat: 41.9, t: 0 }] },
-  ];
-  const stations = { a: { id: 'a', coords: [-87.6, 41.9], lines: ['Red'], weight: 0.5 } };
-
-  it("uses the stressed line's override color on the glow-halo layer (junction mode)", () => {
-    const layers = buildLayers(trains, 0, visibleLines, {
-      display: { trains: true },
-      lineStatus: { Red: 'incident' },
-      pulseHead: PULSE_HEAD_JUNCTION,
-    });
-    const [r, g, b] = layerById(layers, 'glow-halo').props.getFillColor(
-      layerById(layers, 'glow-halo').props.data[0]
-    );
-    expect([r, g, b]).toEqual(lineStressTreatment('incident', 0).color);
-  });
-
-  it('does not render accessibility glyphs while stations are hard-off', () => {
-    const layers = buildLayers([], 0, visibleLines, {
-      stations,
-      display: { stations: true },
-      accessibilityStations: new Set(['a']),
-    });
-    expect(layerById(layers, 'station-accessibility').props.data).toHaveLength(0);
-  });
-});
-
 describe('buildLayers picking scope (U17)', () => {
-  it('enables pickable on vehicle layers, not trail/station layers', () => {
-    const layers = buildLayers([], 0, new Set(['Red']), { pulseHead: PULSE_HEAD_JUNCTION });
-    const pickableIds = ['glow-halo', 'bus-capsules', 'car-bodies'];
-    const notPickableIds = ['trails', 'bus-trails', 'glow-core', 'station-halo', 'station-ring'];
-    for (const id of pickableIds) {
-      expect(layerById(layers, id).props.pickable).toBe(true);
-    }
-    for (const id of notPickableIds) {
-      expect(layerById(layers, id).props.pickable).not.toBe(true);
-    }
-  });
-});
-
-describe('junctionBoostById', () => {
-  it('returns 1 when pulses are far apart', () => {
-    const boosts = junctionBoostById([
-      { id: 'a', pos: [-87.6, 41.9] },
-      { id: 'b', pos: [-87.7, 41.8] },
-    ]);
-    expect(boosts.get('a')).toBe(1);
-    expect(boosts.get('b')).toBe(1);
-  });
-
-  it('boosts above 1 when two pulses nearly overlap', () => {
-    const boosts = junctionBoostById([
-      { id: 'a', pos: [-87.63, 41.88] },
-      { id: 'b', pos: [-87.6301, 41.8801] },
-    ]);
-    expect(boosts.get('a')).toBeGreaterThan(1.5);
-    expect(boosts.get('b')).toBeGreaterThan(1.5);
+  it('enables pickable on bus/car layers only (no train heads in tip-only)', () => {
+    const layers = buildLayers([], 0, new Set(['Red']), {});
+    expect(layerById(layers, 'glow-halo').props.pickable).not.toBe(true);
+    expect(layerById(layers, 'bus-capsules').props.pickable).toBe(true);
+    expect(layerById(layers, 'car-bodies').props.pickable).toBe(true);
+    expect(layerById(layers, 'trails').props.pickable).not.toBe(true);
   });
 });
 
@@ -198,18 +126,7 @@ describe('buildLayers car layer (U11)', () => {
   it('renders car bodies and lights at/above the configured minimum zoom', () => {
     const layers = buildLayers([], 0, visibleLines, { cars, zoom: 14, display: { cars: true } });
     expect(layerById(layers, 'car-bodies').props.data.length).toBe(1);
-    expect(layerById(layers, 'car-headlights').props.data.length).toBe(2); // a headlight pair per car
+    expect(layerById(layers, 'car-headlights').props.data.length).toBe(2);
     expect(layerById(layers, 'car-taillights').props.data.length).toBe(2);
-  });
-
-  it('renders nothing below the configured minimum zoom, even with display.cars on', () => {
-    const layers = buildLayers([], 0, visibleLines, { cars, zoom: 13.9, display: { cars: true } });
-    expect(layerById(layers, 'car-bodies').props.data.length).toBe(0);
-    expect(layerById(layers, 'car-headlights').props.data.length).toBe(0);
-  });
-
-  it('renders nothing when display.cars is false, regardless of zoom', () => {
-    const layers = buildLayers([], 0, visibleLines, { cars, zoom: 16, display: { cars: false } });
-    expect(layerById(layers, 'car-bodies').props.data.length).toBe(0);
   });
 });

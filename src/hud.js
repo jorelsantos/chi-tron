@@ -75,10 +75,8 @@ export function createHud({
   trackGlowLayerIds,
   getStatus,
   onReleaseFollow,
-  // Extra maps that share the same track-glow layer ids (split compare).
-  trackMaps = [],
 }) {
-  const allTrackMaps = [map, ...trackMaps.filter((m) => m && m !== map)];
+  const allTrackMaps = [map];
   const lineRowsEl = document.getElementById('line-rows');
   const displayRowsEl = document.getElementById('display-rows');
   const telemetryCountEl = document.getElementById('telemetry-count');

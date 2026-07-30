@@ -7,14 +7,7 @@ import { PulseEngine } from './pulses.js';
 import { BusEngine } from './buses.js';
 import { CarEngine } from './cars.js';
 import { AlertsEngine } from './alerts.js';
-import {
-  buildLayers,
-  LINE_COLORS,
-  rgbString,
-  lineStressTreatment,
-  PULSE_HEAD_TIP,
-  PULSE_HEAD_JUNCTION,
-} from './layers.js';
+import { buildLayers, LINE_COLORS, rgbString, lineStressTreatment } from './layers.js';
 import { createHud } from './hud.js';
 
 // Design-first pass: always aesthetic simulation. LIVE is dormant (R1/R2).
@@ -120,8 +113,9 @@ async function boot() {
 
   const tracks = await tracksPromise;
 
-  // Side-by-side design compare: same pulse state, two head treatments.
-  const mapOpts = {
+  // Single full-bleed map. Tip-only Tron pulses (trail is the vehicle).
+  const map = new maplibregl.Map({
+    container: 'map',
     style: DARK_CITY_STYLE,
     center: LOOP_PRESET.center,
     zoom: LOOP_PRESET.zoom,
@@ -130,39 +124,21 @@ async function boot() {
     maxPitch: 70,
     antialias: true,
     attributionControl: { compact: true },
-  };
-  const mapTip = new maplibregl.Map({ container: 'map-tip', ...mapOpts });
-  const mapJunc = new maplibregl.Map({ container: 'map-junction', ...mapOpts });
-  // Primary map for HUD camera / follow (left pane).
-  const map = mapTip;
+  });
+  new ResizeObserver(() => map.resize()).observe(document.getElementById('map'));
+  requestAnimationFrame(() => requestAnimationFrame(() => map.resize()));
 
-  function resizeBoth() {
-    mapTip.resize();
-    mapJunc.resize();
-  }
+  map.on('error', (e) => {
+    if (!map.__fellBack && /source|style|tile/i.test(String(e.error?.message))) {
+      map.__fellBack = true;
+      console.warn('[chi-tron] falling back to CARTO style:', e.error?.message);
+      map.setStyle(FALLBACK_STYLE);
+      map.once('styledata', addTrackUnderglow);
+    }
+  });
 
-  // Observe panes (real layout height), not only map containers — a 0-height
-  // container never fires useful resizes. Also force after next paint so CSS
-  // grid has settled before MapLibre samples client dimensions.
-  for (const pane of document.querySelectorAll('.map-pane')) {
-    new ResizeObserver(resizeBoth).observe(pane);
-  }
-  for (const m of [mapTip, mapJunc]) {
-    new ResizeObserver(() => m.resize()).observe(m.getContainer());
-    m.on('error', (e) => {
-      if (!m.__fellBack && /source|style|tile/i.test(String(e.error?.message))) {
-        m.__fellBack = true;
-        console.warn('[chi-tron] falling back to CARTO style:', e.error?.message);
-        m.setStyle(FALLBACK_STYLE);
-        m.once('styledata', () => addTrackUnderglow(m));
-      }
-    });
-  }
-  requestAnimationFrame(() => requestAnimationFrame(resizeBoth));
-
-  // Neon under-glow of the full network — applied to each compare pane.
   const TRACK_GLOW_LAYER_IDS = ['l-tracks-wide', 'l-tracks-mid', 'l-tracks-core'];
-  function addTrackUnderglow(targetMap) {
+  function addTrackUnderglow() {
     const features = Object.entries(tracks).map(([key, line]) => ({
       type: 'Feature',
       id: key,
@@ -172,13 +148,13 @@ async function boot() {
       },
       geometry: { type: 'LineString', coordinates: line.coords },
     }));
-    if (targetMap.getSource('l-tracks')) return;
-    targetMap.addSource('l-tracks', {
+    if (map.getSource('l-tracks')) return;
+    map.addSource('l-tracks', {
       type: 'geojson',
       data: { type: 'FeatureCollection', features },
     });
     const stressOpacity = ['coalesce', ['feature-state', 'stressOpacity'], 1];
-    targetMap.addLayer({
+    map.addLayer({
       id: 'l-tracks-wide',
       type: 'line',
       source: 'l-tracks',
@@ -189,7 +165,7 @@ async function boot() {
         'line-blur': 3,
       },
     });
-    targetMap.addLayer({
+    map.addLayer({
       id: 'l-tracks-mid',
       type: 'line',
       source: 'l-tracks',
@@ -200,7 +176,7 @@ async function boot() {
         'line-blur': 1,
       },
     });
-    targetMap.addLayer({
+    map.addLayer({
       id: 'l-tracks-core',
       type: 'line',
       source: 'l-tracks',
@@ -211,55 +187,21 @@ async function boot() {
       },
     });
   }
-  function onMapReady(m) {
-    addTrackUnderglow(m);
-    resizeBoth();
-    m.jumpTo(LOOP_PRESET);
-  }
-  mapTip.on('load', () => onMapReady(mapTip));
-  mapJunc.on('load', () => onMapReady(mapJunc));
-
-  // Keep both panes on the same camera when the user pans the left (primary) map.
-  let syncingCamera = false;
-  mapTip.on('move', () => {
-    if (syncingCamera) return;
-    syncingCamera = true;
-    const c = mapTip.getCenter();
-    mapJunc.jumpTo({
-      center: [c.lng, c.lat],
-      zoom: mapTip.getZoom(),
-      pitch: mapTip.getPitch(),
-      bearing: mapTip.getBearing(),
-    });
-    syncingCamera = false;
-  });
-  mapJunc.on('move', () => {
-    if (syncingCamera) return;
-    syncingCamera = true;
-    const c = mapJunc.getCenter();
-    mapTip.jumpTo({
-      center: [c.lng, c.lat],
-      zoom: mapJunc.getZoom(),
-      pitch: mapJunc.getPitch(),
-      bearing: mapJunc.getBearing(),
-    });
-    syncingCamera = false;
+  map.on('load', () => {
+    addTrackUnderglow();
+    map.resize();
+    map.jumpTo(LOOP_PRESET);
   });
 
-  const overlayTip = new MapboxOverlay({ interleaved: false, layers: [] });
-  const overlayJunc = new MapboxOverlay({ interleaved: false, layers: [] });
-  mapTip.addControl(overlayTip);
-  mapJunc.addControl(overlayJunc);
-  const overlay = overlayTip; // click-to-follow on primary pane
+  const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
+  map.addControl(overlay);
 
-  // Tron line pulses (design-first). TrainEngine/LIVE pollers stay in the
-  // tree for a later pass but are not started here.
+  // Tip-only Tron pulses — trail is the vehicle (no disc heads).
   const engine = new PulseEngine(tracks);
   const trackKeys = Object.keys(tracks);
   const visibleLines = new Set(trackKeys);
   const lastStressOpacity = new Map();
-  // Buses/cars off in compare so the pulse head treatments stay readable.
-  const display = { trains: true, buses: false, cars: false, buildings: true, stations: false };
+  const display = { trains: true, buses: true, cars: true, buildings: true, stations: false };
 
   let followed = null;
 
@@ -286,18 +228,15 @@ async function boot() {
     trackGlowLayerIds: TRACK_GLOW_LAYER_IDS,
     getStatus: () => feedStatus,
     onReleaseFollow: releaseFollow,
-    trackMaps: [mapJunc],
   });
 
+  // Tip-only: no train head layer to pick — bus/car follow still works.
   function handleVehicleClick(info) {
     if (!info.picked || !info.object) {
       releaseFollow();
       return;
     }
-    if (info.layer?.id === 'glow-halo') {
-      const t = info.object.t;
-      followVehicle('train', t.id, `${t.line.toUpperCase()} · PULSE ${trailingId(t.id)}`);
-    } else if (info.layer?.id === 'bus-capsules') {
+    if (info.layer?.id === 'bus-capsules') {
       const b = info.object;
       followVehicle('bus', b.id, `ROUTE ${b.rt}`);
     } else if (info.layer?.id === 'car-bodies') {
@@ -382,49 +321,34 @@ async function boot() {
     // U15: pushes each line's current opacity pulse onto its l-tracks-* GeoJSON
     // feature every frame — see addTrackUnderglow()'s stressOpacity comment for
     // why this is opacity-only, not a color change, on this particular layer.
-    for (const m of [mapTip, mapJunc]) {
-      if (!m.getSource('l-tracks')) continue;
+    if (map.getSource('l-tracks')) {
       for (const key of trackKeys) {
         const tag = alertsEngine.lineStatus[key] ?? 'normal';
         const opacityMult = lineStressTreatment(tag, currentTime).opacityMult;
-        const cacheKey = `${m.getContainer().id}:${key}`;
-        if (lastStressOpacity.get(cacheKey) === opacityMult) continue;
-        lastStressOpacity.set(cacheKey, opacityMult);
-        m.setFeatureState({ source: 'l-tracks', id: key }, { stressOpacity: opacityMult });
+        if (lastStressOpacity.get(key) === opacityMult) continue;
+        lastStressOpacity.set(key, opacityMult);
+        map.setFeatureState({ source: 'l-tracks', id: key }, { stressOpacity: opacityMult });
       }
     }
-    const layerBase = {
-      trailVersion: engine.trailVersion,
-      stations,
-      display,
-      buses,
-      busTrailVersion: busEngine?.trailVersion ?? 0,
-      viewportCenter: [center.lng, center.lat],
-      cars,
-      zoom: map.getZoom(),
-      lineStatus: alertsEngine.lineStatus,
-      accessibilityStations: alertsEngine.stationFlags,
-    };
-    overlayTip.setProps({
+    overlay.setProps({
       layers: buildLayers(trains, currentTime, visibleLines, {
-        ...layerBase,
-        pulseHead: PULSE_HEAD_TIP,
-      }),
-    });
-    overlayJunc.setProps({
-      layers: buildLayers(trains, currentTime, visibleLines, {
-        ...layerBase,
-        pulseHead: PULSE_HEAD_JUNCTION,
+        trailVersion: engine.trailVersion,
+        stations,
+        display,
+        buses,
+        busTrailVersion: busEngine?.trailVersion ?? 0,
+        viewportCenter: [center.lng, center.lat],
+        cars,
+        zoom: map.getZoom(),
+        lineStatus: alertsEngine.lineStatus,
+        accessibilityStations: alertsEngine.stationFlags,
       }),
     });
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 
-  // debug handles (harmless in prod, invaluable in dev)
   window.__map = map;
-  window.__mapTip = mapTip;
-  window.__mapJunc = mapJunc;
   window.__engine = engine;
   window.__hud = hud;
   window.__busEngine = () => busEngine;

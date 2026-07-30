@@ -50,36 +50,8 @@ export function rgbString(color) {
 // Aesthetic Tron pulses use a short bolt trail (matches PulseEngine.PULSE_TRAIL_SECONDS).
 // Live vehicle trains (dormant this pass) used ~45s; keep pulse-first.
 // Keep in sync with PulseEngine.PULSE_TRAIL_SECONDS.
+// Tip-only aesthetic: trail *is* the vehicle (no disc heads).
 const TRAIL_LENGTH = 8;
-
-/** Pulse head design modes for A/B compare. */
-export const PULSE_HEAD_TIP = 'tip'; // trail only — charge packet tip is the hot end of the streak
-export const PULSE_HEAD_JUNCTION = 'junction'; // pinprick that flares when near other pulses
-
-// Meters: within this range a second pulse counts as a "junction meet."
-export const JUNCTION_RADIUS_M = 110;
-
-/**
- * Per-pulse brightness/size multiplier when other pulses are nearby.
- * 1 = alone; approaches ~2.4 when two heads nearly overlap.
- */
-export function junctionBoostById(pulses, radiusM = JUNCTION_RADIUS_M) {
-  const list = pulses.filter((p) => p.pos);
-  const boosts = new Map();
-  for (const a of list) {
-    let best = Infinity;
-    const [ax, ay] = [a.pos[0] * mPerDegLon(a.pos[1]), a.pos[1] * M_PER_DEG_LAT];
-    for (const b of list) {
-      if (a.id === b.id) continue;
-      const [bx, by] = [b.pos[0] * mPerDegLon(b.pos[1]), b.pos[1] * M_PER_DEG_LAT];
-      const d = Math.hypot(ax - bx, ay - by);
-      if (d < best) best = d;
-    }
-    if (!Number.isFinite(best) || best >= radiusM) boosts.set(a.id, 1);
-    else boosts.set(a.id, 1 + 1.4 * (1 - best / radiusM));
-  }
-  return boosts;
-}
 
 // U9 (R4, KTD12): buses read as a cool ice-blue/silver capsule against the
 // trains' saturated line-color-plus-hot-white-core treatment. Hue ~225°
@@ -238,7 +210,6 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
     zoom = 0,
     lineStatus = {},
     accessibilityStations = EMPTY_SET,
-    pulseHead = PULSE_HEAD_TIP,
   } = options;
 
   // U12's DISPLAY toggles: `trains`/`stations` off means "don't draw this
@@ -248,27 +219,9 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   const shown = display.trains
     ? trains.filter((t) => t.pos && visibleLines.has(t.line) && t.state !== 'removed')
     : [];
-  // Style computed once per frame per train and attached directly to a
-  // {t, style, stress} triple — the three glow-head layers below read
-  // d.style/d.stress as plain fields instead of doing a Map.get(d) per
-  // accessor call. stress is U15's per-line disruption treatment (R12) —
-  // independent of style, which is per-train (isDly/isApp), not per-line.
-  // lineStressTreatment() only varies by line + currentTime, so it's cached
-  // per line here rather than recomputed for every train riding that line.
-  const stressByLine = {};
-  const stressFor = (line) => stressByLine[line] ?? (stressByLine[line] = lineStressTreatment(lineStatus[line], currentTime));
-  const junctionBoost =
-    pulseHead === PULSE_HEAD_JUNCTION ? junctionBoostById(shown) : null;
-  const shownStyled = shown.map((t) => ({
-    t,
-    style: trainStyle(t, currentTime),
-    stress: stressFor(t.line),
-    boost: junctionBoost?.get(t.id) ?? 1,
-  }));
-  // Tip-only: no disc heads — the TripsLayer trail tip *is* the vehicle.
-  // Junction: pinprick heads that swell when pulses meet.
-  const headData = pulseHead === PULSE_HEAD_JUNCTION ? shownStyled : [];
-  const tipTrail = pulseHead === PULSE_HEAD_TIP;
+  // Tip-only: no disc heads. lineStatus drives MapLibre track stress in main.js;
+  // trains here are trail-only energy packets.
+  void lineStatus;
 
   // U9: same "off = empty array, not a conditionally-omitted layer" pattern
   // as trains/stations above. capBuses() is the render-budget safety net
@@ -299,21 +252,15 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       getTimestamps: (d) => d.trail.map((p) => p.t),
       getColor: (d) => LINE_COLORS[d.line],
       currentTime,
-      trailLength: tipTrail ? TRAIL_LENGTH * 1.15 : TRAIL_LENGTH,
+      trailLength: TRAIL_LENGTH * 1.15,
       fadeTrail: true,
       capRounded: true,
       jointRounded: true,
-      // Tip-only: slightly hotter trail so the moving tip reads without a disc.
-      widthMinPixels: tipTrail ? 5 : 3,
-      widthMaxPixels: tipTrail ? 14 : 10,
-      opacity: tipTrail ? 1 : 0.85,
-      updateTriggers: {
-        getPath: trailVersion,
-        getTimestamps: trailVersion,
-        // rebuild when switching head mode (tip vs junction)
-        trailLength: pulseHead,
-        widthMinPixels: pulseHead,
-      },
+      // Tip-only: hot trail so the moving tip reads without a disc head.
+      widthMinPixels: 5,
+      widthMaxPixels: 14,
+      opacity: 1,
+      updateTriggers: { getPath: trailVersion, getTimestamps: trailVersion },
       // R3: additive so two trails crossing sum brightness — light-cycle look.
       parameters: {
         depthTest: false,
@@ -416,34 +363,22 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       radiusMinPixels: 1.2,
       parameters: { depthTest: false },
     }),
-    // Junction mode only: pinprick that flares when other pulses are nearby.
-    // Tip mode leaves these empty — motion is trail-only.
+    // Tip-only: no train disc heads (layer ids kept empty for stable stack).
     new ScatterplotLayer({
       id: 'glow-halo',
-      data: headData,
-      pickable: true,
-      getPosition: (d) => d.t.pos,
-      getFillColor: (d) => [
-        ...(d.stress.color ?? LINE_COLORS[d.t.line]),
-        Math.min(200, 40 * d.boost * d.style.fade * d.stress.opacityMult),
-      ],
-      getRadius: (d) => 28 * d.boost,
-      radiusUnits: 'meters',
-      radiusMinPixels: 2,
-      radiusMaxPixels: 28,
-      updateTriggers: { getRadius: trailVersion, getFillColor: trailVersion },
+      data: [],
+      pickable: false,
+      getPosition: (d) => d.pos,
+      getFillColor: [0, 0, 0, 0],
+      getRadius: 1,
       parameters: { depthTest: false },
     }),
     new ScatterplotLayer({
       id: 'glow-core',
-      data: headData,
-      getPosition: (d) => d.t.pos,
-      getFillColor: (d) => [255, 255, 255, Math.min(255, 200 + 40 * d.boost)],
-      getRadius: (d) => 6 * d.boost,
-      radiusUnits: 'meters',
-      radiusMinPixels: 1.5,
-      radiusMaxPixels: 10,
-      updateTriggers: { getRadius: trailVersion, getFillColor: trailVersion },
+      data: [],
+      getPosition: (d) => d.pos,
+      getFillColor: [0, 0, 0, 0],
+      getRadius: 1,
       parameters: { depthTest: false },
     }),
     // Station layers intentionally empty this pass (shownStations = []).
