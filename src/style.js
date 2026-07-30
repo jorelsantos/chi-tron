@@ -24,28 +24,30 @@ const RENDER_HEIGHT = ['coalesce', ['get', 'render_height'], 8];
 const EXAGGERATED_HEIGHT = ['*', RENDER_HEIGHT, HEIGHT_EXAGGERATION];
 
 /**
- * City landscape palettes. Shipping baseline: coldSteel (cold steel + cyan haze).
+ * Grid in the Fog — cold steel + cyan haze.
+ * Stage is mysterious/noir (mass + weather); L lines own the energy.
+ * Crowns are cool rim light only — never as hot as transit neon.
  */
 const COLD_STEEL = {
   id: 'cold-steel',
   label: 'COLD STEEL + CYAN HAZE',
-  bg: '#010206',
-  landuse: '#03050a',
-  water: '#020810', // deep teal-black lake
-  roadMinor: '#060a14',
-  roadMajor: '#0c1424',
-  // Near-black mass, slight cool lift at height
-  body: ['#010206', '#03050c', '#050812', '#08101c'],
-  // Steel → ice cyan rims (readable without fighting Blue L)
-  crown: ['#061018', '#0e3050', '#1a6a9a'],
-  crownOpacity: 0.82,
+  bg: '#000104',
+  landuse: '#020408',
+  water: '#01060c', // near-black lake, faint teal
+  roadMinor: '#04060c',
+  roadMajor: '#080c16', // quiet wet asphalt
+  // Dead mass — almost pure black; slight cool lift only at height
+  body: ['#000104', '#020308', '#03050c', '#050810'],
+  // Steel → dim ice-cyan rims (below Blue L saturation)
+  crown: ['#040a14', '#0a2038', '#124868'],
+  crownOpacity: 0.58,
   sky: {
-    'sky-color': '#01030a',
-    'sky-horizon-blend': 0.6,
-    'horizon-color': '#0a2040',
-    'horizon-fog-blend': 0.72,
-    'fog-color': '#041220',
-    'fog-ground-blend': 0.78,
+    'sky-color': '#000208',
+    'sky-horizon-blend': 0.68,
+    'horizon-color': '#061828',
+    'horizon-fog-blend': 0.8,
+    'fog-color': '#030c18',
+    'fog-ground-blend': 0.84,
   },
 };
 
