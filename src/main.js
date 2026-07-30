@@ -123,26 +123,27 @@ async function boot() {
     antialias: true,
     attributionControl: { compact: true },
   };
-  const mapClassic = new maplibregl.Map({
-    container: 'map-classic',
-    style: makeCityStyle(CITY_PALETTES.classic),
-    ...mapOpts,
-  });
+  // A/B: Magenta Night (left) vs Wet Magenta hybrid (right).
   const mapMagenta = new maplibregl.Map({
     container: 'map-magenta',
     style: makeCityStyle(CITY_PALETTES.magenta),
     ...mapOpts,
   });
-  const map = mapClassic; // primary for HUD camera / follow
+  const mapWet = new maplibregl.Map({
+    container: 'map-wet',
+    style: makeCityStyle(CITY_PALETTES.wetMagenta),
+    ...mapOpts,
+  });
+  const map = mapMagenta; // primary for HUD camera / follow
 
   function resizeBoth() {
-    mapClassic.resize();
     mapMagenta.resize();
+    mapWet.resize();
   }
   for (const pane of document.querySelectorAll('.map-pane')) {
     new ResizeObserver(resizeBoth).observe(pane);
   }
-  for (const m of [mapClassic, mapMagenta]) {
+  for (const m of [mapMagenta, mapWet]) {
     new ResizeObserver(() => m.resize()).observe(m.getContainer());
     m.on('error', (e) => {
       if (!m.__fellBack && /source|style|tile/i.test(String(e.error?.message))) {
@@ -210,8 +211,8 @@ async function boot() {
     resizeBoth();
     m.jumpTo(LOOP_PRESET);
   }
-  mapClassic.on('load', () => onMapReady(mapClassic));
   mapMagenta.on('load', () => onMapReady(mapMagenta));
+  mapWet.on('load', () => onMapReady(mapWet));
 
   let syncingCamera = false;
   function syncFrom(src, dst) {
@@ -226,14 +227,14 @@ async function boot() {
     });
     syncingCamera = false;
   }
-  mapClassic.on('move', () => syncFrom(mapClassic, mapMagenta));
-  mapMagenta.on('move', () => syncFrom(mapMagenta, mapClassic));
+  mapMagenta.on('move', () => syncFrom(mapMagenta, mapWet));
+  mapWet.on('move', () => syncFrom(mapWet, mapMagenta));
 
-  const overlayClassic = new MapboxOverlay({ interleaved: false, layers: [] });
   const overlayMagenta = new MapboxOverlay({ interleaved: false, layers: [] });
-  mapClassic.addControl(overlayClassic);
+  const overlayWet = new MapboxOverlay({ interleaved: false, layers: [] });
   mapMagenta.addControl(overlayMagenta);
-  const overlay = overlayClassic;
+  mapWet.addControl(overlayWet);
+  const overlay = overlayMagenta;
 
   // Tip-only Tron pulses on both panes; buses/cars off so city palette is clearer.
   const engine = new PulseEngine(tracks);
@@ -267,7 +268,7 @@ async function boot() {
     trackGlowLayerIds: TRACK_GLOW_LAYER_IDS,
     getStatus: () => feedStatus,
     onReleaseFollow: releaseFollow,
-    trackMaps: [mapMagenta],
+    trackMaps: [mapWet],
   });
 
   // Tip-only: no train head layer to pick — bus/car follow still works.
@@ -361,7 +362,7 @@ async function boot() {
     // U15: pushes each line's current opacity pulse onto its l-tracks-* GeoJSON
     // feature every frame — see addTrackUnderglow()'s stressOpacity comment for
     // why this is opacity-only, not a color change, on this particular layer.
-    for (const m of [mapClassic, mapMagenta]) {
+    for (const m of [mapMagenta, mapWet]) {
       if (!m.getSource('l-tracks')) continue;
       for (const key of trackKeys) {
         const tag = alertsEngine.lineStatus[key] ?? 'normal';
@@ -384,9 +385,10 @@ async function boot() {
       lineStatus: alertsEngine.lineStatus,
       accessibilityStations: alertsEngine.stationFlags,
     };
-    const layers = buildLayers(trains, currentTime, visibleLines, layerOpts);
-    overlayClassic.setProps({ layers });
     overlayMagenta.setProps({
+      layers: buildLayers(trains, currentTime, visibleLines, layerOpts),
+    });
+    overlayWet.setProps({
       layers: buildLayers(trains, currentTime, visibleLines, layerOpts),
     });
     requestAnimationFrame(frame);
@@ -394,8 +396,8 @@ async function boot() {
   requestAnimationFrame(frame);
 
   window.__map = map;
-  window.__mapClassic = mapClassic;
   window.__mapMagenta = mapMagenta;
+  window.__mapWet = mapWet;
   window.__engine = engine;
   window.__hud = hud;
   window.__busEngine = () => busEngine;

@@ -52,6 +52,11 @@
       text-shadow: 0 0 10px rgba(255, 80, 180, 0.5);
       border-color: rgba(255, 100, 190, 0.35);
     }
+    .map-pane.wet .pane-label {
+      color: rgba(200, 140, 190, 0.92);
+      text-shadow: 0 0 12px rgba(120, 40, 100, 0.55);
+      border-color: rgba(140, 80, 130, 0.4);
+    }
 
     /* HUD chrome — never intercepts map interaction */
     .hud { position: absolute; z-index: 10; pointer-events: none; font-family: "SF Mono", "Menlo", monospace; }
@@ -314,13 +319,13 @@
 </head>
 <body>
   <div id="map-split">
-    <div class="map-pane classic">
-      <div class="pane-label">CLASSIC CYBERPUNK · cold steel + cyan</div>
-      <div class="map-canvas" id="map-classic"></div>
-    </div>
     <div class="map-pane magenta">
       <div class="pane-label">MAGENTA NIGHT · edgerunners energy</div>
       <div class="map-canvas" id="map-magenta"></div>
+    </div>
+    <div class="map-pane wet">
+      <div class="pane-label">WET MAGENTA · rain · weight · noir</div>
+      <div class="map-canvas" id="map-wet"></div>
     </div>
   </div>
   <div id="scanlines"></div>

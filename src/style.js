@@ -70,6 +70,30 @@ export const CITY_PALETTES = {
       'fog-ground-blend': 0.72,
     },
   },
+  // Wet Magenta = Magenta Night DNA + Blade Runner weight/rain-noir.
+  // ~70% atmosphere/mass noir, ~30% magenta on fog + rare crowns.
+  wetMagenta: {
+    id: 'wet-magenta',
+    label: 'WET MAGENTA',
+    bg: '#020104',
+    landuse: '#050308',
+    water: '#030208', // black-mirror lake
+    roadMinor: '#060408',
+    roadMajor: '#0a060e', // wet asphalt, almost gone
+    // Heavier, less chroma — dead industrial mass
+    body: ['#020104', '#040208', '#06030a', '#0a0510'],
+    // Dim merlot rims; never hot pink
+    crown: ['#08040c', '#1a0a18', '#4a1838'],
+    crownOpacity: 0.48,
+    sky: {
+      'sky-color': '#030108',
+      'sky-horizon-blend': 0.72,
+      'horizon-color': '#0c0614',
+      'horizon-fog-blend': 0.82,
+      'fog-color': '#080410',
+      'fog-ground-blend': 0.85,
+    },
+  },
 };
 
 /** Build a full MapLibre style for one landscape palette. */
