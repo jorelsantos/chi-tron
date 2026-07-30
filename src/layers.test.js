@@ -5,7 +5,14 @@
 // `data` arrays (layer construction alone touches no WebGL/canvas).
 
 import { describe, it, expect } from 'vitest';
-import { trainStyle, buildLayers, lineStressTreatment } from './layers.js';
+import {
+  trainStyle,
+  buildLayers,
+  lineStressTreatment,
+  junctionBoostById,
+  PULSE_HEAD_TIP,
+  PULSE_HEAD_JUNCTION,
+} from './layers.js';
 
 function layerById(layers, id) {
   return layers.find((l) => l.id === id);
@@ -55,10 +62,22 @@ describe('buildLayers DISPLAY toggles and station cache', () => {
     b: { coords: [-87.61, 41.91], lines: ['Blue'], weight: 0.5 },
   };
 
-  it('renders trains and their glow when display.trains is true', () => {
+  it('tip mode draws trails but no disc heads', () => {
     const layers = buildLayers(trains, 0, visibleLines, {
       stations,
       display: { trains: true, stations: false },
+      pulseHead: PULSE_HEAD_TIP,
+    });
+    expect(layerById(layers, 'trails').props.data.length).toBe(1);
+    expect(layerById(layers, 'glow-core').props.data.length).toBe(0);
+    expect(layerById(layers, 'glow-halo').props.data.length).toBe(0);
+  });
+
+  it('junction mode draws pinprick heads', () => {
+    const layers = buildLayers(trains, 0, visibleLines, {
+      stations,
+      display: { trains: true, stations: false },
+      pulseHead: PULSE_HEAD_JUNCTION,
     });
     expect(layerById(layers, 'trails').props.data.length).toBe(1);
     expect(layerById(layers, 'glow-core').props.data.length).toBe(1);
@@ -68,6 +87,7 @@ describe('buildLayers DISPLAY toggles and station cache', () => {
     const layers = buildLayers(trains, 0, visibleLines, {
       stations,
       display: { trains: false, stations: false },
+      pulseHead: PULSE_HEAD_JUNCTION,
     });
     expect(layerById(layers, 'trails').props.data.length).toBe(0);
     expect(layerById(layers, 'glow-core').props.data.length).toBe(0);
@@ -115,10 +135,11 @@ describe('buildLayers line stress and accessibility glyph (U15)', () => {
   ];
   const stations = { a: { id: 'a', coords: [-87.6, 41.9], lines: ['Red'], weight: 0.5 } };
 
-  it("uses the stressed line's override color on the glow-halo layer", () => {
+  it("uses the stressed line's override color on the glow-halo layer (junction mode)", () => {
     const layers = buildLayers(trains, 0, visibleLines, {
       display: { trains: true },
       lineStatus: { Red: 'incident' },
+      pulseHead: PULSE_HEAD_JUNCTION,
     });
     const [r, g, b] = layerById(layers, 'glow-halo').props.getFillColor(
       layerById(layers, 'glow-halo').props.data[0]
@@ -138,7 +159,7 @@ describe('buildLayers line stress and accessibility glyph (U15)', () => {
 
 describe('buildLayers picking scope (U17)', () => {
   it('enables pickable on vehicle layers, not trail/station layers', () => {
-    const layers = buildLayers([], 0, new Set(['Red']), {});
+    const layers = buildLayers([], 0, new Set(['Red']), { pulseHead: PULSE_HEAD_JUNCTION });
     const pickableIds = ['glow-halo', 'bus-capsules', 'car-bodies'];
     const notPickableIds = ['trails', 'bus-trails', 'glow-core', 'station-halo', 'station-ring'];
     for (const id of pickableIds) {
@@ -147,6 +168,26 @@ describe('buildLayers picking scope (U17)', () => {
     for (const id of notPickableIds) {
       expect(layerById(layers, id).props.pickable).not.toBe(true);
     }
+  });
+});
+
+describe('junctionBoostById', () => {
+  it('returns 1 when pulses are far apart', () => {
+    const boosts = junctionBoostById([
+      { id: 'a', pos: [-87.6, 41.9] },
+      { id: 'b', pos: [-87.7, 41.8] },
+    ]);
+    expect(boosts.get('a')).toBe(1);
+    expect(boosts.get('b')).toBe(1);
+  });
+
+  it('boosts above 1 when two pulses nearly overlap', () => {
+    const boosts = junctionBoostById([
+      { id: 'a', pos: [-87.63, 41.88] },
+      { id: 'b', pos: [-87.6301, 41.8801] },
+    ]);
+    expect(boosts.get('a')).toBeGreaterThan(1.5);
+    expect(boosts.get('b')).toBeGreaterThan(1.5);
   });
 });
 

@@ -75,7 +75,10 @@ export function createHud({
   trackGlowLayerIds,
   getStatus,
   onReleaseFollow,
+  // Extra maps that share the same track-glow layer ids (split compare).
+  trackMaps = [],
 }) {
+  const allTrackMaps = [map, ...trackMaps.filter((m) => m && m !== map)];
   const lineRowsEl = document.getElementById('line-rows');
   const displayRowsEl = document.getElementById('display-rows');
   const telemetryCountEl = document.getElementById('telemetry-count');
@@ -97,8 +100,10 @@ export function createHud({
   function applyLineFilters() {
     if (!trackGlowLayerIds) return;
     const filter = ['in', ['get', 'line'], ['literal', [...visibleLines]]];
-    for (const id of trackGlowLayerIds) {
-      if (map.getLayer(id)) map.setFilter(id, filter);
+    for (const m of allTrackMaps) {
+      for (const id of trackGlowLayerIds) {
+        if (m.getLayer(id)) m.setFilter(id, filter);
+      }
     }
   }
 
@@ -139,13 +144,15 @@ export function createHud({
   // fallback — apply the current toggle state as soon as they exist so a
   // reload never starts every line un-filtered.
   applyLineFilters();
-  map.on('styledata', applyLineFilters);
+  for (const m of allTrackMaps) m.on('styledata', applyLineFilters);
 
   // ---- DISPLAY section ----------------------------------------------------
 
   function setBuildingsVisible(on) {
-    for (const id of BUILDING_LAYER_IDS) {
-      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+    for (const m of allTrackMaps) {
+      for (const id of BUILDING_LAYER_IDS) {
+        if (m.getLayer(id)) m.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+      }
     }
   }
 

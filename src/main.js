@@ -7,7 +7,14 @@ import { PulseEngine } from './pulses.js';
 import { BusEngine } from './buses.js';
 import { CarEngine } from './cars.js';
 import { AlertsEngine } from './alerts.js';
-import { buildLayers, LINE_COLORS, rgbString, lineStressTreatment } from './layers.js';
+import {
+  buildLayers,
+  LINE_COLORS,
+  rgbString,
+  lineStressTreatment,
+  PULSE_HEAD_TIP,
+  PULSE_HEAD_JUNCTION,
+} from './layers.js';
 import { createHud } from './hud.js';
 
 // Design-first pass: always aesthetic simulation. LIVE is dormant (R1/R2).
@@ -113,13 +120,9 @@ async function boot() {
 
   const tracks = await tracksPromise;
 
-  const map = new maplibregl.Map({
-    container: 'map',
+  // Side-by-side design compare: same pulse state, two head treatments.
+  const mapOpts = {
     style: DARK_CITY_STYLE,
-    // U7: boot at LOOP_PRESET (not the raw CHICAGO_LOOP center) so the
-    // shipping framing — biased east for the sidebar U12 will add — is
-    // what every later unit (traffic tuning, frame budget, camera presets)
-    // tunes against from the start.
     center: LOOP_PRESET.center,
     zoom: LOOP_PRESET.zoom,
     pitch: LOOP_PRESET.pitch,
@@ -127,34 +130,27 @@ async function boot() {
     maxPitch: 70,
     antialias: true,
     attributionControl: { compact: true },
-  });
-  // The browser pane can settle its layout after init — keep canvas full-bleed.
-  new ResizeObserver(() => map.resize()).observe(document.getElementById('map'));
+  };
+  const mapTip = new maplibregl.Map({ container: 'map-tip', ...mapOpts });
+  const mapJunc = new maplibregl.Map({ container: 'map-junction', ...mapOpts });
+  // Primary map for HUD camera / follow (left pane).
+  const map = mapTip;
 
-  map.on('error', (e) => {
-    // OpenFreeMap unreachable → fall back to CARTO dark matter once.
-    if (!map.__fellBack && /source|style|tile/i.test(String(e.error?.message))) {
-      map.__fellBack = true;
-      console.warn('[chi-tron] falling back to CARTO style:', e.error?.message);
-      map.setStyle(FALLBACK_STYLE);
-      map.once('styledata', addTrackUnderglow);
-    }
-  });
+  for (const m of [mapTip, mapJunc]) {
+    new ResizeObserver(() => m.resize()).observe(m.getContainer());
+    m.on('error', (e) => {
+      if (!m.__fellBack && /source|style|tile/i.test(String(e.error?.message))) {
+        m.__fellBack = true;
+        console.warn('[chi-tron] falling back to CARTO style:', e.error?.message);
+        m.setStyle(FALLBACK_STYLE);
+        m.once('styledata', () => addTrackUnderglow(m));
+      }
+    });
+  }
 
-  // Neon under-glow of the full network: three stacked passes per line —
-  // wide/very-low-opacity bloom halo, a mid pass to soften the falloff, and
-  // a hairline bright core — so lines read as *glowing*, not drawn (R2).
-  // All three passes share one GeoJSON source (`l-tracks`) and every
-  // feature carries `properties.line`, so hud.js's per-line sidebar toggle
-  // (U12) can hide one line's whole glow stack with a single shared
-  // mechanism (map.setFilter on each id in this list) via the
-  // `trackGlowLayerIds` param passed to createHud() below.
+  // Neon under-glow of the full network — applied to each compare pane.
   const TRACK_GLOW_LAYER_IDS = ['l-tracks-wide', 'l-tracks-mid', 'l-tracks-core'];
-  function addTrackUnderglow() {
-    // U15: a stable string `id` per feature is what lets the frame loop
-    // below target this exact feature with setFeatureState() every frame —
-    // GeoJSON sources need an explicit id for that; the line key is already
-    // unique so it doubles as one with no extra bookkeeping.
+  function addTrackUnderglow(targetMap) {
     const features = Object.entries(tracks).map(([key, line]) => ({
       type: 'Feature',
       id: key,
@@ -164,24 +160,13 @@ async function boot() {
       },
       geometry: { type: 'LineString', coordinates: line.coords },
     }));
-    if (map.getSource('l-tracks')) return;
-    map.addSource('l-tracks', {
+    if (targetMap.getSource('l-tracks')) return;
+    targetMap.addSource('l-tracks', {
       type: 'geojson',
       data: { type: 'FeatureCollection', features },
     });
-    // U15: every pass's opacity carries an extra multiplier read from
-    // per-feature state (default 1 — untouched until the frame loop below
-    // has ever called setFeatureState for that line). Only opacity, not
-    // color, is feature-state driven here: unlike the deck.gl train glow in
-    // layers.js (plain JS, recomputed every frame with no such limit),
-    // animating a MapLibre paint *color* smoothly via feature-state risks a
-    // gap before the first frame writes a value — a numeric multiplier
-    // defaulting safely to 1 via `coalesce` has no such failure mode. The
-    // moving trains' own glow already carries the full color shift (R12);
-    // this is a subtler, opacity-only echo on the static network.
     const stressOpacity = ['coalesce', ['feature-state', 'stressOpacity'], 1];
-    // Wide soft bloom halo — most of the "glow" read comes from this pass.
-    map.addLayer({
+    targetMap.addLayer({
       id: 'l-tracks-wide',
       type: 'line',
       source: 'l-tracks',
@@ -192,9 +177,7 @@ async function boot() {
         'line-blur': 3,
       },
     });
-    // Mid pass — softens the step between the wide halo and the hairline
-    // core so the falloff reads as continuous bloom rather than two rings.
-    map.addLayer({
+    targetMap.addLayer({
       id: 'l-tracks-mid',
       type: 'line',
       source: 'l-tracks',
@@ -205,10 +188,7 @@ async function boot() {
         'line-blur': 1,
       },
     });
-    // Hairline bright core — the actual "line" a viewer's eye follows.
-    // Near-opaque at its own saturated color (not white) so each line's
-    // hue stays identifiable at a glance, even crossing a building crown.
-    map.addLayer({
+    targetMap.addLayer({
       id: 'l-tracks-core',
       type: 'line',
       source: 'l-tracks',
@@ -219,26 +199,46 @@ async function boot() {
       },
     });
   }
-  map.on('load', () => {
-    addTrackUnderglow();
-    // Re-assert the intended camera: pane layout can shift during init and
-    // leave the map at a stale transform.
-    map.resize();
-    map.jumpTo(LOOP_PRESET);
+  function onMapReady(m) {
+    addTrackUnderglow(m);
+    m.resize();
+    m.jumpTo(LOOP_PRESET);
+  }
+  mapTip.on('load', () => onMapReady(mapTip));
+  mapJunc.on('load', () => onMapReady(mapJunc));
+
+  // Keep both panes on the same camera when the user pans the left (primary) map.
+  let syncingCamera = false;
+  mapTip.on('move', () => {
+    if (syncingCamera) return;
+    syncingCamera = true;
+    const c = mapTip.getCenter();
+    mapJunc.jumpTo({
+      center: [c.lng, c.lat],
+      zoom: mapTip.getZoom(),
+      pitch: mapTip.getPitch(),
+      bearing: mapTip.getBearing(),
+    });
+    syncingCamera = false;
+  });
+  mapJunc.on('move', () => {
+    if (syncingCamera) return;
+    syncingCamera = true;
+    const c = mapJunc.getCenter();
+    mapTip.jumpTo({
+      center: [c.lng, c.lat],
+      zoom: mapJunc.getZoom(),
+      pitch: mapJunc.getPitch(),
+      bearing: mapJunc.getBearing(),
+    });
+    syncingCamera = false;
   });
 
-  // Depth/occlusion decision (U7): interleaved stays false. With it false,
-  // deck.gl composites its whole canvas over MapLibre's, so fill-extrusion
-  // buildings never occlude train glow — at 1.9x heights and pitch 60 the
-  // trails visibly glow through tower faces. Verified visually and judged
-  // to read as part of the Blade Runner aesthetic (light overpowering
-  // structure) rather than as a bug, so we keep interleaved: false rather
-  // than pay for a shared depth buffer. Revisit only if a later unit's
-  // visual gate calls the x-ray read out as a problem — switching to
-  // interleaved: true is a bigger change (shared depth buffer with every
-  // layer's `depthTest: false` in src/layers.js) with real risk to verify.
-  const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
-  map.addControl(overlay);
+  const overlayTip = new MapboxOverlay({ interleaved: false, layers: [] });
+  const overlayJunc = new MapboxOverlay({ interleaved: false, layers: [] });
+  mapTip.addControl(overlayTip);
+  mapJunc.addControl(overlayJunc);
+  const overlay = overlayTip; // click-to-follow on primary pane
 
   // Tron line pulses (design-first). TrainEngine/LIVE pollers stay in the
   // tree for a later pass but are not started here.
@@ -246,7 +246,8 @@ async function boot() {
   const trackKeys = Object.keys(tracks);
   const visibleLines = new Set(trackKeys);
   const lastStressOpacity = new Map();
-  const display = { trains: true, buses: true, cars: true, buildings: true, stations: false };
+  // Buses/cars off in compare so the pulse head treatments stay readable.
+  const display = { trains: true, buses: false, cars: false, buildings: true, stations: false };
 
   let followed = null;
 
@@ -273,6 +274,7 @@ async function boot() {
     trackGlowLayerIds: TRACK_GLOW_LAYER_IDS,
     getStatus: () => feedStatus,
     onReleaseFollow: releaseFollow,
+    trackMaps: [mapJunc],
   });
 
   function handleVehicleClick(info) {
@@ -368,27 +370,39 @@ async function boot() {
     // U15: pushes each line's current opacity pulse onto its l-tracks-* GeoJSON
     // feature every frame — see addTrackUnderglow()'s stressOpacity comment for
     // why this is opacity-only, not a color change, on this particular layer.
-    if (map.getSource('l-tracks')) {
+    for (const m of [mapTip, mapJunc]) {
+      if (!m.getSource('l-tracks')) continue;
       for (const key of trackKeys) {
         const tag = alertsEngine.lineStatus[key] ?? 'normal';
         const opacityMult = lineStressTreatment(tag, currentTime).opacityMult;
-        if (lastStressOpacity.get(key) === opacityMult) continue;
-        lastStressOpacity.set(key, opacityMult);
-        map.setFeatureState({ source: 'l-tracks', id: key }, { stressOpacity: opacityMult });
+        const cacheKey = `${m.getContainer().id}:${key}`;
+        if (lastStressOpacity.get(cacheKey) === opacityMult) continue;
+        lastStressOpacity.set(cacheKey, opacityMult);
+        m.setFeatureState({ source: 'l-tracks', id: key }, { stressOpacity: opacityMult });
       }
     }
-    overlay.setProps({
+    const layerBase = {
+      trailVersion: engine.trailVersion,
+      stations,
+      display,
+      buses,
+      busTrailVersion: busEngine?.trailVersion ?? 0,
+      viewportCenter: [center.lng, center.lat],
+      cars,
+      zoom: map.getZoom(),
+      lineStatus: alertsEngine.lineStatus,
+      accessibilityStations: alertsEngine.stationFlags,
+    };
+    overlayTip.setProps({
       layers: buildLayers(trains, currentTime, visibleLines, {
-        trailVersion: engine.trailVersion,
-        stations,
-        display,
-        buses,
-        busTrailVersion: busEngine?.trailVersion ?? 0,
-        viewportCenter: [center.lng, center.lat],
-        cars,
-        zoom: map.getZoom(),
-        lineStatus: alertsEngine.lineStatus,
-        accessibilityStations: alertsEngine.stationFlags,
+        ...layerBase,
+        pulseHead: PULSE_HEAD_TIP,
+      }),
+    });
+    overlayJunc.setProps({
+      layers: buildLayers(trains, currentTime, visibleLines, {
+        ...layerBase,
+        pulseHead: PULSE_HEAD_JUNCTION,
       }),
     });
     requestAnimationFrame(frame);
@@ -397,10 +411,12 @@ async function boot() {
 
   // debug handles (harmless in prod, invaluable in dev)
   window.__map = map;
+  window.__mapTip = mapTip;
+  window.__mapJunc = mapJunc;
   window.__engine = engine;
   window.__hud = hud;
-  window.__busEngine = () => busEngine; // a getter, since busEngine is reassigned once patterns.json resolves
-  window.__carEngine = () => carEngine; // same shape, for roads.json
+  window.__busEngine = () => busEngine;
+  window.__carEngine = () => carEngine;
   window.__alertsEngine = alertsEngine;
 }
 

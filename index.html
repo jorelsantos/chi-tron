@@ -11,7 +11,32 @@
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; background: #05060a; overflow: hidden; }
-    #map { position: absolute; inset: 0; }
+    /* Split compare: tip-only | junction-brighten */
+    #map-split {
+      position: absolute; inset: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    .map-pane {
+      position: relative;
+      min-width: 0;
+      border-right: 1px solid rgba(0, 212, 255, 0.18);
+    }
+    .map-pane:last-child { border-right: none; }
+    .map-canvas { position: absolute; inset: 0; }
+    .pane-label {
+      position: absolute; z-index: 12; top: 12px; left: 50%; transform: translateX(-50%);
+      pointer-events: none;
+      font-family: "SF Mono", "Menlo", monospace;
+      font-size: 11px; letter-spacing: 0.28em;
+      color: rgba(0, 212, 255, 0.9);
+      text-shadow: 0 0 10px rgba(0, 212, 255, 0.55);
+      background: rgba(4, 6, 13, 0.72);
+      border: 1px solid rgba(0, 212, 255, 0.28);
+      border-radius: 6px;
+      padding: 6px 12px;
+      white-space: nowrap;
+    }
 
     /* HUD chrome — never intercepts map interaction */
     .hud { position: absolute; z-index: 10; pointer-events: none; font-family: "SF Mono", "Menlo", monospace; }
@@ -273,7 +298,16 @@
   </style>
 </head>
 <body>
-  <div id="map"></div>
+  <div id="map-split">
+    <div class="map-pane">
+      <div class="pane-label">TIP ONLY · trail is the vehicle</div>
+      <div class="map-canvas" id="map-tip"></div>
+    </div>
+    <div class="map-pane">
+      <div class="pane-label">JUNCTION BRIGHTEN · pinprick flares on meet</div>
+      <div class="map-canvas" id="map-junction"></div>
+    </div>
+  </div>
   <div id="scanlines"></div>
   <div id="vignette"></div>
   <div class="hud" id="wordmark">CHI-TRON<small>CHICAGO TRANSIT GRID</small></div>
