@@ -17,8 +17,17 @@ export const CITY_PRESET = {
   bearing: 0,
 };
 
-const HEIGHT_EXAGGERATION = 1.9;
-const CROWN_LIGHT_DELTA = 14;
+export const HEIGHT_EXAGGERATION = 1.9;
+export const CROWN_LIGHT_DELTA = 14;
+
+// Phase C: hard camera stop at Illinois — no other states.
+// SW → NE [lon, lat]; light pad so UI chrome doesn't clip the border.
+export const ILLINOIS_BOUNDS = [
+  [-91.55, 36.95],
+  [-87.0, 42.55],
+];
+// Most zoomed-out view ≈ full state (not Midwest / national).
+export const ILLINOIS_MIN_ZOOM = 6.2;
 const BUILDING_FILTER = ['!=', ['get', 'hide_3d'], true];
 const RENDER_HEIGHT = ['coalesce', ['get', 'render_height'], 8];
 const EXAGGERATED_HEIGHT = ['*', RENDER_HEIGHT, HEIGHT_EXAGGERATION];

@@ -34,7 +34,8 @@ const LINE_NAMES = {
   Y: 'Yellow Line',
 };
 
-const BUILDING_LAYER_IDS = ['buildings-3d', 'buildings-3d-crown'];
+// Mutable: starts as OpenFreeMap extrusion ids; main may swap to chi-buildings-* after load.
+let buildingLayerIds = ['buildings-3d', 'buildings-3d-crown'];
 const DISPLAY_TOGGLES = [
   { key: 'trains', label: 'Trains' }, // line pulses this pass
   { key: 'buses', label: 'Buses' },
@@ -149,10 +150,16 @@ export function createHud({
 
   function setBuildingsVisible(on) {
     for (const m of allTrackMaps) {
-      for (const id of BUILDING_LAYER_IDS) {
+      for (const id of buildingLayerIds) {
         if (m.getLayer(id)) m.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
       }
     }
+  }
+
+  function setBuildingLayerIds(ids) {
+    buildingLayerIds = ids?.length ? [...ids] : buildingLayerIds;
+    // Re-apply current buildings toggle against the new layer set.
+    setBuildingsVisible(!!display.buildings);
   }
 
   // Side effects a DISPLAY toggle needs beyond flipping `display[key]` —
@@ -363,6 +370,7 @@ export function createHud({
     tick,
     applyLineFilters,
     setBuildingsVisible,
+    setBuildingLayerIds,
     refreshSystemStatus,
     setMode,
     flashFallbackNote,

@@ -1,7 +1,15 @@
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { DARK_CITY_STYLE, FALLBACK_STYLE, LOOP_PRESET } from './style.js';
+import {
+  DARK_CITY_STYLE,
+  FALLBACK_STYLE,
+  LOOP_PRESET,
+  ILLINOIS_BOUNDS,
+  ILLINOIS_MIN_ZOOM,
+  HEIGHT_EXAGGERATION,
+  CROWN_LIGHT_DELTA,
+} from './style.js';
 import { now } from './trains.js';
 import { PulseEngine } from './pulses.js';
 import { BusEngine } from './buses.js';
@@ -122,9 +130,14 @@ async function boot() {
     pitch: LOOP_PRESET.pitch,
     bearing: LOOP_PRESET.bearing,
     maxPitch: 70,
+    minZoom: ILLINOIS_MIN_ZOOM,
+    maxBounds: ILLINOIS_BOUNDS,
     antialias: true,
     attributionControl: { compact: true },
   });
+  // Phase C: Illinois hard stop (also re-assert after style swap).
+  map.setMaxBounds(ILLINOIS_BOUNDS);
+  map.setMinZoom(ILLINOIS_MIN_ZOOM);
   new ResizeObserver(() => map.resize()).observe(document.getElementById('map'));
   requestAnimationFrame(() => requestAnimationFrame(() => map.resize()));
 
@@ -187,10 +200,56 @@ async function boot() {
       },
     });
   }
+  // Phase B: real Chicago footprints (stories → height). Same cold-steel
+  // paint as OFM extrusions; OFM buildings hidden once city data is on.
+  function addChicagoBuildings(geojson) {
+    if (map.getSource('chi-buildings')) return;
+    map.addSource('chi-buildings', { type: 'geojson', data: geojson });
+    const H = ['*', ['coalesce', ['get', 'h'], 8], HEIGHT_EXAGGERATION];
+    const bodyStops = ['interpolate', ['linear'], H, 0, '#000104', 80, '#020308', 250, '#03050c', 600, '#050810'];
+    const crownStops = ['interpolate', ['linear'], H, 0, '#040a14', 150, '#0a2038', 600, '#124868'];
+    map.addLayer({
+      id: 'chi-buildings-3d',
+      type: 'fill-extrusion',
+      source: 'chi-buildings',
+      minzoom: 13,
+      paint: {
+        'fill-extrusion-color': bodyStops,
+        'fill-extrusion-height': H,
+        'fill-extrusion-base': 0,
+        'fill-extrusion-opacity': 0.97,
+      },
+    });
+    map.addLayer({
+      id: 'chi-buildings-3d-crown',
+      type: 'fill-extrusion',
+      source: 'chi-buildings',
+      minzoom: 13,
+      paint: {
+        'fill-extrusion-color': crownStops,
+        'fill-extrusion-height': ['+', H, CROWN_LIGHT_DELTA],
+        'fill-extrusion-base': H,
+        'fill-extrusion-opacity': 0.58,
+      },
+    });
+    // Demote generic OpenFreeMap blocks so real skyline owns downtown mass.
+    for (const id of ['buildings-3d', 'buildings-3d-crown']) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+    }
+    // Keep track glow above building mass.
+    for (const id of TRACK_GLOW_LAYER_IDS) {
+      if (map.getLayer(id)) map.moveLayer(id);
+    }
+  }
+
+  let loadChicagoBuildings = null; // set after createHud so layer toggle rebinds safely
   map.on('load', () => {
     addTrackUnderglow();
     map.resize();
     map.jumpTo(LOOP_PRESET);
+    map.setMaxBounds(ILLINOIS_BOUNDS);
+    map.setMinZoom(ILLINOIS_MIN_ZOOM);
+    loadChicagoBuildings?.();
   });
 
   const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
@@ -229,6 +288,19 @@ async function boot() {
     getStatus: () => feedStatus,
     onReleaseFollow: releaseFollow,
   });
+
+  loadChicagoBuildings = () => {
+    fetch('/data/buildings.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((geojson) => {
+        addChicagoBuildings(geojson);
+        hud.setBuildingLayerIds(['chi-buildings-3d', 'chi-buildings-3d-crown']);
+      })
+      .catch((err) => {
+        console.warn('[chi-tron] buildings.json missing/failed — OFM extrusions stay:', err.message);
+      });
+  };
+  if (map.loaded()) loadChicagoBuildings();
 
   // Tip-only: no train head layer to pick — bus/car follow still works.
   function handleVehicleClick(info) {

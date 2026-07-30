@@ -10,6 +10,7 @@
     "tracks": "node scripts/build-tracks.mjs",
     "patterns": "node --env-file=.env scripts/build-patterns.mjs",
     "roads": "node scripts/build-roads.mjs",
+    "buildings": "node scripts/build-buildings.mjs",
     "test": "vitest run"
   },
   "dependencies": {
