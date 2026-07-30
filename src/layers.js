@@ -49,7 +49,7 @@ export function rgbString(color) {
 
 // Aesthetic Tron pulses use a short bolt trail (matches PulseEngine.PULSE_TRAIL_SECONDS).
 // Live vehicle trains (dormant this pass) used ~45s; keep pulse-first.
-const TRAIL_LENGTH = 3.5;
+const TRAIL_LENGTH = 8;
 
 // U9 (R4, KTD12): buses read as a cool ice-blue/silver capsule against the
 // trains' saturated line-color-plus-hot-white-core treatment. Hue ~225°
@@ -265,8 +265,9 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       fadeTrail: true,
       capRounded: true,
       jointRounded: true,
-      widthMinPixels: 4,
-      opacity: 0.95,
+      widthMinPixels: 5,
+      widthMaxPixels: 14,
+      opacity: 1,
       updateTriggers: { getPath: trailVersion, getTimestamps: trailVersion },
       // R3: additive so two trails crossing sum brightness — light-cycle look.
       parameters: {

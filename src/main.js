@@ -300,7 +300,7 @@ async function boot() {
   overlay.setProps({ onClick: handleVehicleClick });
 
   engine.onStatus = setStatus;
-  engine.seed(2);
+  engine.seed(3);
   setStatus('mock');
 
   // U15: no EXPLORE/LIVE split here — the High-Level Technical Design's
