@@ -285,9 +285,8 @@
   <!-- U12: instrument sidebar. Row content (line rows + display toggles) is
        built by src/hud.js — this is just the docked glass shell. -->
   <div class="hud" id="sidebar">
-    <!-- U16 (R13): MODE — the primary EXPLORE/LIVE affordance, first in the
-         sidebar rather than a DISPLAY row. -->
-    <div class="panel-section">
+    <!-- MODE hidden this pass — always aesthetic sim (LIVE dormant). -->
+    <div class="panel-section" id="mode-section" style="display:none" aria-hidden="true">
       <div id="mode-rows" role="group" aria-label="Explore or Live mode"></div>
       <div id="mode-fallback-note">LIVE UNAVAILABLE — FELL BACK TO EXPLORE</div>
     </div>

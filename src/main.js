@@ -2,19 +2,16 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapboxOverlay } from '@deck.gl/mapbox';
 import { DARK_CITY_STYLE, FALLBACK_STYLE, LOOP_PRESET } from './style.js';
-import { TrainEngine, now } from './trains.js';
+import { now } from './trains.js';
+import { PulseEngine } from './pulses.js';
 import { BusEngine } from './buses.js';
 import { CarEngine } from './cars.js';
 import { AlertsEngine } from './alerts.js';
 import { buildLayers, LINE_COLORS, rgbString, lineStressTreatment } from './layers.js';
 import { createHud } from './hud.js';
 
-// U16 (R13): `?mock=1` still works as a deep link into EXPLORE (already the
-// default, so it's a no-op beyond "don't error"); `?live=1` is the new
-// override for LIVE. Neither wins if both are present in an odd deep link —
-// `live` is checked first, so that's the one that takes it.
-const params = new URLSearchParams(location.search);
-let mode = params.has('live') ? 'live' : 'explore';
+// Design-first pass: always aesthetic simulation. LIVE is dormant (R1/R2).
+// `?live=1` is ignored so deep links cannot start polling.
 const statusEl = document.getElementById('status');
 const busStatusEl = document.getElementById('bus-status');
 const clockEl = document.getElementById('clock');
@@ -90,15 +87,9 @@ async function boot() {
     .then((patternsData) => {
       busEngine = new BusEngine(patternsData);
       busEngine.onStatus = setBusStatus;
-      // U16: applies whatever mode is *current* at the moment patterns.json
-      // resolves — if the user already toggled to LIVE while this was still
-      // loading, `mode` (closed over below, not copied) already reflects that.
-      if (mode === 'explore') {
-        busEngine.seedMock(3);
-        setBusStatus('mock');
-      } else {
-        busEngine.startLive();
-      }
+      // Always aesthetic this pass — LIVE bus polling stays dormant.
+      busEngine.seedMock(3);
+      setBusStatus('mock');
     })
     .catch((err) => {
       console.warn('[chi-tron] patterns.json failed to load, buses disabled:', err.message);
@@ -196,9 +187,9 @@ async function boot() {
       source: 'l-tracks',
       paint: {
         'line-color': ['get', 'color'],
-        'line-opacity': ['*', 0.14, stressOpacity],
-        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 5, 16, 16],
-        'line-blur': 3,
+        'line-opacity': ['*', 0.22, stressOpacity],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 6, 16, 18],
+        'line-blur': 3.5,
       },
     });
     // Mid pass — softens the step between the wide halo and the hairline
@@ -209,9 +200,9 @@ async function boot() {
       source: 'l-tracks',
       paint: {
         'line-color': ['get', 'color'],
-        'line-opacity': ['*', 0.4, stressOpacity],
-        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2, 16, 5],
-        'line-blur': 1,
+        'line-opacity': ['*', 0.55, stressOpacity],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 16, 6],
+        'line-blur': 1.2,
       },
     });
     // Hairline bright core — the actual "line" a viewer's eye follows.
@@ -249,55 +240,24 @@ async function boot() {
   const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
   map.addControl(overlay);
 
-  const engine = new TrainEngine(tracks);
-  const trackKeys = Object.keys(tracks); // tracks never changes after boot — computed once, not per frame
+  // Tron line pulses (design-first). TrainEngine/LIVE pollers stay in the
+  // tree for a later pass but are not started here.
+  const engine = new PulseEngine(tracks);
+  const trackKeys = Object.keys(tracks);
   const visibleLines = new Set(trackKeys);
-  // U-fix #5: last stressOpacity actually written per line, so a 'normal'
-  // (or steady 'added') line settles at the value 1 once and then this
-  // frame's setFeatureState call is skipped — only a genuinely changing
-  // pulse (planned/incident's sine functions) keeps writing every frame,
-  // instead of forcing a continuous MapLibre repaint even when nothing on
-  // this layer visually changed.
   const lastStressOpacity = new Map();
-  // U12's DISPLAY toggles — buildLayers() reads trains/buses/stations;
-  // buildings isn't part of the deck.gl stack so hud.js applies it straight
-  // to the MapLibre style instead of routing it through this object.
-  const display = { trains: true, buses: true, cars: true, buildings: true, stations: true };
+  const display = { trains: true, buses: true, cars: true, buildings: true, stations: false };
 
-  // U12: instrument sidebar + telemetry/compass chrome. Owns the LINES and
-  // DISPLAY toggle DOM; mutates `visibleLines` and `display` in place so
-  // this frame loop's existing buildLayers() call picks up changes with no
-  // further wiring.
-  const hud = createHud({
-    map,
-    lineColors: LINE_COLORS,
-    visibleLines,
-    display,
-    trackGlowLayerIds: TRACK_GLOW_LAYER_IDS,
-    getStatus: () => feedStatus,
-    mode,
-    onModeChange: applyMode,
-    onReleaseFollow: releaseFollow,
-  });
-
-  // U17 (R14): click-to-follow. `followed` is the single source of truth —
-  // {kind, id} or null — read every frame to recenter, and read by
-  // releaseFollow()/handleVehicleClick() to update it. Deliberately not a
-  // separate "is following" boolean plus "which vehicle" pair: one nullable
-  // value can't disagree with itself.
   let followed = null;
 
   function releaseFollow() {
-    if (!followed) return; // idempotent — camera preset clicks call this unconditionally
+    if (!followed) return;
     followed = null;
     hud.setFollowLabel(null);
   }
 
-  // A train's `id` is `${lineKey}-${runNumber}` live or `mock-${lineKey}-${i}`
-  // simulated (trains.js) — strips either prefix down to just the trailing
-  // run/index number for display, rather than showing the raw id verbatim.
   function trailingId(id) {
-    return id.replace(/^mock-/, '').split('-').pop();
+    return String(id).replace(/^pulse-/, '').replace(/^mock-/, '').split('-').pop();
   }
 
   function followVehicle(kind, id, label) {
@@ -305,18 +265,24 @@ async function boot() {
     hud.setFollowLabel(label);
   }
 
-  // The single onClick MapboxOverlay dispatches every canvas click through,
-  // pickable layer or not (info.picked distinguishes the two) — set once,
-  // not per frame, since it needs no state beyond what deck.gl's own
-  // picking result (`info.object`) already carries.
+  const hud = createHud({
+    map,
+    lineColors: LINE_COLORS,
+    visibleLines,
+    display,
+    trackGlowLayerIds: TRACK_GLOW_LAYER_IDS,
+    getStatus: () => feedStatus,
+    onReleaseFollow: releaseFollow,
+  });
+
   function handleVehicleClick(info) {
     if (!info.picked || !info.object) {
-      releaseFollow(); // U17 step 3: clicking empty space releases
+      releaseFollow();
       return;
     }
     if (info.layer?.id === 'glow-halo') {
       const t = info.object.t;
-      followVehicle('train', t.id, `${t.line.toUpperCase()} LINE · RUN ${trailingId(t.id)}`);
+      followVehicle('train', t.id, `${t.line.toUpperCase()} · PULSE ${trailingId(t.id)}`);
     } else if (info.layer?.id === 'bus-capsules') {
       const b = info.object;
       followVehicle('bus', b.id, `ROUTE ${b.rt}`);
@@ -328,51 +294,14 @@ async function boot() {
   }
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') releaseFollow(); // U17 step 3
+    if (e.key === 'Escape') releaseFollow();
   });
 
-  // U17 step 1/8: pickable is opt-in per layer (src/layers.js) — trains,
-  // buses, cars only, not the basemap/tracks/stations — so this one
-  // overlay-level onClick is all picking costs, bounded to those layers.
   overlay.setProps({ onClick: handleVehicleClick });
 
-  // U16 (R13, KTD11): the single place that owns entering either mode.
-  // Always stop() + clear() before (re-)seeding/starting — idempotent and
-  // order-safe regardless of which mode was previously active (including
-  // "none yet," at boot), which is what makes repeated toggling leave
-  // exactly one active vehicle set with no orphaned timers (Poller.stop()
-  // clears its own interval + visibilitychange listener every time).
-  function applyMode(newMode) {
-    mode = newMode;
-    hud.setMode(mode);
-    engine.stop();
-    engine.clear();
-    busEngine?.stop();
-    busEngine?.clear();
-    if (mode === 'explore') {
-      engine.seedMock(4);
-      setStatus('mock');
-      if (busEngine) {
-        busEngine.seedMock(3);
-        setBusStatus('mock');
-      }
-    } else {
-      engine.startLive();
-      busEngine?.startLive();
-    }
-  }
-  // U16 step 3: a LIVE mode that can't reach the (primary, train) feed
-  // falls back to EXPLORE visibly rather than leaving the map looking
-  // emptily "successful." Wired before the first applyMode() call below so
-  // even that first LIVE attempt (from `?live=1`) is covered.
-  engine.onStatus = (state) => {
-    setStatus(state);
-    if (state === 'lost' && mode === 'live') {
-      applyMode('explore');
-      hud.flashFallbackNote();
-    }
-  };
-  applyMode(mode);
+  engine.onStatus = setStatus;
+  engine.seed(2);
+  setStatus('mock');
 
   // U15: no EXPLORE/LIVE split here — the High-Level Technical Design's
   // alerts path (AL -> SS) isn't gated by MODE like trains/buses are; it's

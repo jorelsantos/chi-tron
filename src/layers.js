@@ -47,7 +47,9 @@ export function rgbString(color) {
   return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 }
 
-const TRAIL_LENGTH = 45; // seconds of visible trail
+// Aesthetic Tron pulses use a short bolt trail (matches PulseEngine.PULSE_TRAIL_SECONDS).
+// Live vehicle trains (dormant this pass) used ~45s; keep pulse-first.
+const TRAIL_LENGTH = 3.5;
 
 // U9 (R4, KTD12): buses read as a cool ice-blue/silver capsule against the
 // trains' saturated line-color-plus-hot-white-core treatment. Hue ~225°
@@ -245,14 +247,11 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   const headlights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, CAR_BODY_HALF_LEN_M));
   const taillights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, -CAR_BODY_HALF_LEN_M));
 
-  const shownStations = getShownStations(stations, visibleLines, display);
-  // Color priority for a multi-line station: prefer a line the user hasn't
-  // toggled off. Without this, a station keeps the color of a hidden line
-  // for as long as any other served line stays visible — the ring looks
-  // like it belongs to a line that isn't even rendering. shownStations is
-  // already filtered to "at least one served line is visible", so find()
-  // always succeeds; the ?? is a defensive fallback, not the normal path.
-  const stationColorLine = (d) => d.lines.find((l) => visibleLines.has(l)) ?? d.lines[0];
+  // Stations hard-off this pass (design: Tron grid, no ring punctuation).
+  const shownStations = [];
+  void stations;
+  void getShownStations;
+  void display.stations;
 
   return [
     new TripsLayer({
@@ -266,13 +265,10 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       fadeTrail: true,
       capRounded: true,
       jointRounded: true,
-      widthMinPixels: 3,
-      opacity: 0.85,
+      widthMinPixels: 4,
+      opacity: 0.95,
       updateTriggers: { getPath: trailVersion, getTimestamps: trailVersion },
-      // R3: additive so two trails crossing (a junction, a shared
-      // underglow segment) sum brightness instead of alpha-compositing —
-      // the classic "light-cycle trail" look. luma.gl v9 (deck.gl 9.3)
-      // takes WebGPU-style string blend factors, not raw GL enums.
+      // R3: additive so two trails crossing sum brightness — light-cycle look.
       parameters: {
         depthTest: false,
         blend: true,
@@ -374,14 +370,8 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       radiusMinPixels: 1.2,
       parameters: { depthTest: false },
     }),
-    // wide halo — U15: a stressed line's own color (from lineStressTreatment)
-    // overrides the line's normal color; opacityMult layers its pulse/flicker
-    // on top of the existing isDly/isApp fade.
-    // U17 (R14, KTD8): the pickable target for click-to-follow on trains —
-    // this pass specifically (not glow-mid/core) because its wide radius is
-    // the most forgiving click target of the three, and making only one of
-    // the three passes pickable (not all three) is what "vehicle layers
-    // only," not "every layer," actually bounds the picking cost to.
+    // Pulse core: tight hot white + soft line-colored halo (not the old
+    // three-disc train head stack). Pickable for optional follow.
     new ScatterplotLayer({
       id: 'glow-halo',
       data: shownStyled,
@@ -389,88 +379,48 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       getPosition: (d) => d.t.pos,
       getFillColor: (d) => [
         ...(d.stress.color ?? LINE_COLORS[d.t.line]),
-        40 * d.style.fade * d.style.brightBoost * d.stress.opacityMult,
+        55 * d.style.fade * d.stress.opacityMult,
       ],
-      getRadius: (d) => 120 * d.style.radiusMult,
+      getRadius: () => 90,
       radiusUnits: 'meters',
-      radiusMinPixels: 10,
+      radiusMinPixels: 8,
       parameters: { depthTest: false },
     }),
-    // mid glow
-    new ScatterplotLayer({
-      id: 'glow-mid',
-      data: shownStyled,
-      getPosition: (d) => d.t.pos,
-      getFillColor: (d) => [
-        ...(d.stress.color ?? LINE_COLORS[d.t.line]),
-        110 * d.style.fade * d.style.brightBoost * d.stress.opacityMult,
-      ],
-      getRadius: (d) => 45 * d.style.radiusMult,
-      radiusUnits: 'meters',
-      radiusMinPixels: 5,
-      parameters: { depthTest: false },
-    }),
-    // bright core — hot white normally, red-shifted+pulsing when delayed
     new ScatterplotLayer({
       id: 'glow-core',
       data: shownStyled,
       getPosition: (d) => d.t.pos,
-      getFillColor: (d) => [...d.style.core, 235 * d.style.fade],
-      getRadius: (d) => 14 * d.style.radiusMult,
+      getFillColor: () => [255, 255, 255, 245],
+      getRadius: () => 18,
       radiusUnits: 'meters',
-      radiusMinPixels: 2.5,
+      radiusMinPixels: 3,
       parameters: { depthTest: false },
     }),
-    // Station nodes (R11): a soft halo plus a stroke-only ring, both scaled
-    // by each station's ridership weight (0.12 floor .. 1.0 ceiling — see
-    // scripts/build-tracks.mjs) so the Loop's high-ridership cluster blazes
-    // and outlying stops read as embers. Colored by the station's
-    // highest-priority served line (LINE_KEYS order) — multi-line stations
-    // (e.g. Belmont) get one ring in that line's color rather than one per
-    // line, keeping the punctuation legible instead of stacking rings.
+    // Station layers intentionally empty this pass (shownStations = []).
     new ScatterplotLayer({
       id: 'station-halo',
       data: shownStations,
       getPosition: (d) => d.coords,
-      getFillColor: (d) => [...LINE_COLORS[stationColorLine(d)], 20 + 45 * d.weight],
-      getRadius: (d) => 16 + 44 * d.weight,
-      radiusUnits: 'meters',
-      radiusMinPixels: 2,
+      getFillColor: [0, 0, 0, 0],
+      getRadius: 1,
       parameters: { depthTest: false },
     }),
     new ScatterplotLayer({
       id: 'station-ring',
       data: shownStations,
       getPosition: (d) => d.coords,
-      filled: false,
-      stroked: true,
-      getLineColor: (d) => [...LINE_COLORS[stationColorLine(d)], 150 + 105 * d.weight],
-      getLineWidth: (d) => 1.2 + 2.3 * d.weight,
-      lineWidthUnits: 'pixels',
-      lineWidthMinPixels: 1,
-      getRadius: (d) => 12 + 28 * d.weight,
-      radiusUnits: 'meters',
-      radiusMinPixels: 2,
+      getFillColor: [0, 0, 0, 0],
+      getRadius: 1,
       parameters: { depthTest: false },
     }),
-    // U15 (R12) step 3: a small amber glyph marks a station with an active
-    // accessibility/elevator alert — infrastructure trouble reading at
-    // station scale, distinct from (and rendered on top of) that station's
-    // own line-colored ring above.
     new ScatterplotLayer({
       id: 'station-accessibility',
-      data: shownStations.filter((d) => accessibilityStations.has(d.id)),
+      data: [],
       getPosition: (d) => d.coords,
-      filled: false,
-      stroked: true,
-      getLineColor: [...ACCESSIBILITY_GLYPH_COLOR, 235],
-      getLineWidth: 1.6,
-      lineWidthUnits: 'pixels',
-      lineWidthMinPixels: 1.5,
-      getRadius: 26,
-      radiusUnits: 'meters',
-      radiusMinPixels: 5,
+      getFillColor: [...ACCESSIBILITY_GLYPH_COLOR, 0],
+      getRadius: 1,
       parameters: { depthTest: false },
     }),
   ];
+  void accessibilityStations;
 }

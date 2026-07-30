@@ -36,11 +36,11 @@ const LINE_NAMES = {
 
 const BUILDING_LAYER_IDS = ['buildings-3d', 'buildings-3d-crown'];
 const DISPLAY_TOGGLES = [
-  { key: 'trains', label: 'Trains' },
-  { key: 'buses', label: 'Buses' }, // U9
-  { key: 'cars', label: 'Cars' }, // U11
+  { key: 'trains', label: 'Trains' }, // line pulses this pass
+  { key: 'buses', label: 'Buses' },
+  { key: 'cars', label: 'Cars' },
   { key: 'buildings', label: 'Buildings' },
-  { key: 'stations', label: 'Stations' },
+  // Stations toggle removed — rings hard-off for Tron grid aesthetic.
 ];
 
 // U13: the two camera presets the CAMERA section's buttons fly to. LOOP is
@@ -74,8 +74,6 @@ export function createHud({
   display,
   trackGlowLayerIds,
   getStatus,
-  mode = 'explore',
-  onModeChange,
   onReleaseFollow,
 }) {
   const lineRowsEl = document.getElementById('line-rows');
@@ -87,42 +85,12 @@ export function createHud({
   const lineCountEls = new Map();
   const displayButtons = new Map();
 
-  // ---- MODE (U16, R13) ---------------------------------------------------
-  // The app's primary two-state affordance — both states always rendered,
-  // the active one reads as pressed, exactly like the CAMERA presets'
-  // convention but persistent (aria-pressed) rather than momentary.
-
-  const modeRowsEl = document.getElementById('mode-rows');
-  const fallbackNoteEl = document.getElementById('mode-fallback-note');
-  const modeButtons = new Map();
-  let fallbackNoteTimer = null;
-
-  function setMode(newMode) {
-    for (const [key, btn] of modeButtons) btn.setAttribute('aria-pressed', String(key === newMode));
-  }
-
-  // U16 step 3: called when LIVE couldn't connect and main.js has already
-  // fallen back to EXPLORE — a brief, self-clearing note rather than a
-  // permanent fixture, so it reads as "this just happened," not as an
-  // ongoing state (setMode('explore') above is what represents the ongoing
-  // state).
-  function flashFallbackNote() {
-    if (!fallbackNoteEl) return;
-    fallbackNoteEl.classList.add('visible');
-    clearTimeout(fallbackNoteTimer);
-    fallbackNoteTimer = setTimeout(() => fallbackNoteEl.classList.remove('visible'), 6000);
-  }
-
-  for (const key of ['explore', 'live']) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'mode-btn';
-    btn.textContent = key.toUpperCase();
-    btn.setAttribute('aria-pressed', String(key === mode));
-    btn.addEventListener('click', () => onModeChange?.(key));
-    modeRowsEl?.appendChild(btn);
-    modeButtons.set(key, btn);
-  }
+  // MODE (EXPLORE/LIVE) removed this pass — always aesthetic sim. Keep no-op
+  // hooks so older call sites / tests don't crash if they still pass them.
+  function setMode() {}
+  function flashFallbackNote() {}
+  const modeSection = document.getElementById('mode-section');
+  if (modeSection) modeSection.style.display = 'none';
 
   // ---- LINES section -----------------------------------------------------
 
