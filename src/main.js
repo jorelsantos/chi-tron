@@ -1,7 +1,7 @@
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { DARK_CITY_STYLE, FALLBACK_STYLE, LOOP_PRESET } from './style.js';
+import { makeCityStyle, CITY_PALETTES, FALLBACK_STYLE, LOOP_PRESET } from './style.js';
 import { now } from './trains.js';
 import { PulseEngine } from './pulses.js';
 import { BusEngine } from './buses.js';
@@ -113,10 +113,8 @@ async function boot() {
 
   const tracks = await tracksPromise;
 
-  // Single full-bleed map. Tip-only Tron pulses (trail is the vehicle).
-  const map = new maplibregl.Map({
-    container: 'map',
-    style: DARK_CITY_STYLE,
+  // Side-by-side city landscape compare (same tip-only pulses).
+  const mapOpts = {
     center: LOOP_PRESET.center,
     zoom: LOOP_PRESET.zoom,
     pitch: LOOP_PRESET.pitch,
@@ -124,21 +122,41 @@ async function boot() {
     maxPitch: 70,
     antialias: true,
     attributionControl: { compact: true },
+  };
+  const mapClassic = new maplibregl.Map({
+    container: 'map-classic',
+    style: makeCityStyle(CITY_PALETTES.classic),
+    ...mapOpts,
   });
-  new ResizeObserver(() => map.resize()).observe(document.getElementById('map'));
-  requestAnimationFrame(() => requestAnimationFrame(() => map.resize()));
+  const mapMagenta = new maplibregl.Map({
+    container: 'map-magenta',
+    style: makeCityStyle(CITY_PALETTES.magenta),
+    ...mapOpts,
+  });
+  const map = mapClassic; // primary for HUD camera / follow
 
-  map.on('error', (e) => {
-    if (!map.__fellBack && /source|style|tile/i.test(String(e.error?.message))) {
-      map.__fellBack = true;
-      console.warn('[chi-tron] falling back to CARTO style:', e.error?.message);
-      map.setStyle(FALLBACK_STYLE);
-      map.once('styledata', addTrackUnderglow);
-    }
-  });
+  function resizeBoth() {
+    mapClassic.resize();
+    mapMagenta.resize();
+  }
+  for (const pane of document.querySelectorAll('.map-pane')) {
+    new ResizeObserver(resizeBoth).observe(pane);
+  }
+  for (const m of [mapClassic, mapMagenta]) {
+    new ResizeObserver(() => m.resize()).observe(m.getContainer());
+    m.on('error', (e) => {
+      if (!m.__fellBack && /source|style|tile/i.test(String(e.error?.message))) {
+        m.__fellBack = true;
+        console.warn('[chi-tron] falling back to CARTO style:', e.error?.message);
+        m.setStyle(FALLBACK_STYLE);
+        m.once('styledata', () => addTrackUnderglow(m));
+      }
+    });
+  }
+  requestAnimationFrame(() => requestAnimationFrame(resizeBoth));
 
   const TRACK_GLOW_LAYER_IDS = ['l-tracks-wide', 'l-tracks-mid', 'l-tracks-core'];
-  function addTrackUnderglow() {
+  function addTrackUnderglow(targetMap) {
     const features = Object.entries(tracks).map(([key, line]) => ({
       type: 'Feature',
       id: key,
@@ -148,13 +166,13 @@ async function boot() {
       },
       geometry: { type: 'LineString', coordinates: line.coords },
     }));
-    if (map.getSource('l-tracks')) return;
-    map.addSource('l-tracks', {
+    if (targetMap.getSource('l-tracks')) return;
+    targetMap.addSource('l-tracks', {
       type: 'geojson',
       data: { type: 'FeatureCollection', features },
     });
     const stressOpacity = ['coalesce', ['feature-state', 'stressOpacity'], 1];
-    map.addLayer({
+    targetMap.addLayer({
       id: 'l-tracks-wide',
       type: 'line',
       source: 'l-tracks',
@@ -165,7 +183,7 @@ async function boot() {
         'line-blur': 3,
       },
     });
-    map.addLayer({
+    targetMap.addLayer({
       id: 'l-tracks-mid',
       type: 'line',
       source: 'l-tracks',
@@ -176,7 +194,7 @@ async function boot() {
         'line-blur': 1,
       },
     });
-    map.addLayer({
+    targetMap.addLayer({
       id: 'l-tracks-core',
       type: 'line',
       source: 'l-tracks',
@@ -187,21 +205,42 @@ async function boot() {
       },
     });
   }
-  map.on('load', () => {
-    addTrackUnderglow();
-    map.resize();
-    map.jumpTo(LOOP_PRESET);
-  });
+  function onMapReady(m) {
+    addTrackUnderglow(m);
+    resizeBoth();
+    m.jumpTo(LOOP_PRESET);
+  }
+  mapClassic.on('load', () => onMapReady(mapClassic));
+  mapMagenta.on('load', () => onMapReady(mapMagenta));
 
-  const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
-  map.addControl(overlay);
+  let syncingCamera = false;
+  function syncFrom(src, dst) {
+    if (syncingCamera) return;
+    syncingCamera = true;
+    const c = src.getCenter();
+    dst.jumpTo({
+      center: [c.lng, c.lat],
+      zoom: src.getZoom(),
+      pitch: src.getPitch(),
+      bearing: src.getBearing(),
+    });
+    syncingCamera = false;
+  }
+  mapClassic.on('move', () => syncFrom(mapClassic, mapMagenta));
+  mapMagenta.on('move', () => syncFrom(mapMagenta, mapClassic));
 
-  // Tip-only Tron pulses — trail is the vehicle (no disc heads).
+  const overlayClassic = new MapboxOverlay({ interleaved: false, layers: [] });
+  const overlayMagenta = new MapboxOverlay({ interleaved: false, layers: [] });
+  mapClassic.addControl(overlayClassic);
+  mapMagenta.addControl(overlayMagenta);
+  const overlay = overlayClassic;
+
+  // Tip-only Tron pulses on both panes; buses/cars off so city palette is clearer.
   const engine = new PulseEngine(tracks);
   const trackKeys = Object.keys(tracks);
   const visibleLines = new Set(trackKeys);
   const lastStressOpacity = new Map();
-  const display = { trains: true, buses: true, cars: true, buildings: true, stations: false };
+  const display = { trains: true, buses: false, cars: false, buildings: true, stations: false };
 
   let followed = null;
 
@@ -228,6 +267,7 @@ async function boot() {
     trackGlowLayerIds: TRACK_GLOW_LAYER_IDS,
     getStatus: () => feedStatus,
     onReleaseFollow: releaseFollow,
+    trackMaps: [mapMagenta],
   });
 
   // Tip-only: no train head layer to pick — bus/car follow still works.
@@ -321,34 +361,41 @@ async function boot() {
     // U15: pushes each line's current opacity pulse onto its l-tracks-* GeoJSON
     // feature every frame — see addTrackUnderglow()'s stressOpacity comment for
     // why this is opacity-only, not a color change, on this particular layer.
-    if (map.getSource('l-tracks')) {
+    for (const m of [mapClassic, mapMagenta]) {
+      if (!m.getSource('l-tracks')) continue;
       for (const key of trackKeys) {
         const tag = alertsEngine.lineStatus[key] ?? 'normal';
         const opacityMult = lineStressTreatment(tag, currentTime).opacityMult;
-        if (lastStressOpacity.get(key) === opacityMult) continue;
-        lastStressOpacity.set(key, opacityMult);
-        map.setFeatureState({ source: 'l-tracks', id: key }, { stressOpacity: opacityMult });
+        const cacheKey = `${m.getContainer().id}:${key}`;
+        if (lastStressOpacity.get(cacheKey) === opacityMult) continue;
+        lastStressOpacity.set(cacheKey, opacityMult);
+        m.setFeatureState({ source: 'l-tracks', id: key }, { stressOpacity: opacityMult });
       }
     }
-    overlay.setProps({
-      layers: buildLayers(trains, currentTime, visibleLines, {
-        trailVersion: engine.trailVersion,
-        stations,
-        display,
-        buses,
-        busTrailVersion: busEngine?.trailVersion ?? 0,
-        viewportCenter: [center.lng, center.lat],
-        cars,
-        zoom: map.getZoom(),
-        lineStatus: alertsEngine.lineStatus,
-        accessibilityStations: alertsEngine.stationFlags,
-      }),
+    const layerOpts = {
+      trailVersion: engine.trailVersion,
+      stations,
+      display,
+      buses,
+      busTrailVersion: busEngine?.trailVersion ?? 0,
+      viewportCenter: [center.lng, center.lat],
+      cars,
+      zoom: map.getZoom(),
+      lineStatus: alertsEngine.lineStatus,
+      accessibilityStations: alertsEngine.stationFlags,
+    };
+    const layers = buildLayers(trains, currentTime, visibleLines, layerOpts);
+    overlayClassic.setProps({ layers });
+    overlayMagenta.setProps({
+      layers: buildLayers(trains, currentTime, visibleLines, layerOpts),
     });
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 
   window.__map = map;
+  window.__mapClassic = mapClassic;
+  window.__mapMagenta = mapMagenta;
   window.__engine = engine;
   window.__hud = hud;
   window.__busEngine = () => busEngine;

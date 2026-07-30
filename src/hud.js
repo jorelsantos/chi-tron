@@ -75,8 +75,9 @@ export function createHud({
   trackGlowLayerIds,
   getStatus,
   onReleaseFollow,
+  trackMaps = [],
 }) {
-  const allTrackMaps = [map];
+  const allTrackMaps = [map, ...trackMaps.filter((m) => m && m !== map)];
   const lineRowsEl = document.getElementById('line-rows');
   const displayRowsEl = document.getElementById('display-rows');
   const telemetryCountEl = document.getElementById('telemetry-count');
