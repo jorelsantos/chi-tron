@@ -129,6 +129,45 @@ export function normalizeArrivals(data, opts = {}) {
 }
 
 /**
+ * Group arrival rows by service direction for Transit-style board sections.
+ * Prefers stpDe ("Service toward Midway"); falls back to destNm.
+ * @param {object[]} rows
+ * @returns {{ title: string, rows: object[] }[]}
+ */
+export function groupArrivalsByDirection(rows) {
+  const map = new Map();
+  for (const r of rows || []) {
+    let title = (r.stpDe && String(r.stpDe).trim()) || '';
+    if (!title && r.destNm) title = `Toward ${r.destNm}`;
+    if (!title) title = 'Arrivals';
+    // Normalize casing for merge
+    const key = title.toLowerCase();
+    if (!map.has(key)) map.set(key, { title, rows: [] });
+    map.get(key).rows.push(r);
+  }
+  // Prefer Midway section before Loop when both present
+  const groups = [...map.values()];
+  groups.sort((a, b) => {
+    const rank = (t) => {
+      const s = t.toLowerCase();
+      if (s.includes('midway')) return 0;
+      if (s.includes('loop')) return 1;
+      return 2;
+    };
+    const d = rank(a.title) - rank(b.title);
+    return d !== 0 ? d : a.title.localeCompare(b.title);
+  });
+  for (const g of groups) {
+    g.rows.sort((a, b) => {
+      const am = a.minutes === 'DUE' ? -1 : a.minutes;
+      const bm = b.minutes === 'DUE' ? -1 : b.minutes;
+      return am - bm;
+    });
+  }
+  return groups;
+}
+
+/**
  * One-shot fetch for a station board.
  * @param {{ mapid: string, rt?: string }} opts
  */

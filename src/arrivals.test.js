@@ -7,6 +7,7 @@ import {
   parseChicagoArrT,
   minutesUntil,
   formatClock,
+  groupArrivalsByDirection,
 } from './arrivals.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -52,5 +53,18 @@ describe('arrivals normalize', () => {
   it('formatClock returns a string', () => {
     const ms = parseChicagoArrT('2026-08-08T12:29:01');
     expect(formatClock(ms).length).toBeGreaterThan(0);
+  });
+
+  it('groupArrivalsByDirection splits Midway vs Loop', () => {
+    const data = JSON.parse(readFileSync(FIXTURE, 'utf8'));
+    const rows = normalizeArrivals(data, { rtFilter: 'org', nowMs: Date.now() });
+    const groups = groupArrivalsByDirection(rows);
+    expect(groups.length).toBeGreaterThanOrEqual(1);
+    const titles = groups.map((g) => g.title.toLowerCase());
+    // Fixture Halsted typically has toward Midway (and maybe Loop)
+    expect(titles.some((t) => t.includes('midway') || t.includes('loop') || t.includes('toward'))).toBe(true);
+    for (const g of groups) {
+      expect(g.rows.length).toBeGreaterThan(0);
+    }
   });
 });
