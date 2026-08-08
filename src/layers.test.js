@@ -64,6 +64,29 @@ describe('buildLayers tip-only trains', () => {
     expect(layerById(layers, 'trails').props.data.length).toBe(1);
     expect(layerById(layers, 'glow-core').props.data.length).toBe(0);
     expect(layerById(layers, 'glow-halo').props.data.length).toBe(0);
+    // Player layer always present (empty in GRID)
+    expect(layerById(layers, 'player-trail')).toBeTruthy();
+    expect(layerById(layers, 'player-trail').props.data.length).toBe(0);
+  });
+
+  it('draws player-trail when player has a path', () => {
+    const player = {
+      id: 'player',
+      line: 'Red',
+      pos: [-87.6, 41.9],
+      trail: [
+        { lon: -87.601, lat: 41.899, t: 0 },
+        { lon: -87.6, lat: 41.9, t: 1 },
+      ],
+      state: 'tracking',
+    };
+    const layers = buildLayers(trains, 1, visibleLines, {
+      stations,
+      display: { trains: true, stations: false },
+      player,
+      playerTrailVersion: 1,
+    });
+    expect(layerById(layers, 'player-trail').props.data.length).toBe(1);
   });
 
   it('empties trail data when display.trains is false', () => {

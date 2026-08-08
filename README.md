@@ -1,14 +1,16 @@
 # CHI-TRON
 
 Chicago L as a Tron grid — tip-only neon energy on real track geometry over a
-**cold steel + cyan haze** 3D city (**Grid in the Fog**). Aesthetic simulation
-by default; LIVE feeds optional later.
+**cold steel + cyan haze** 3D city (**Grid in the Fog**). Aesthetic **GRID**
+simulation by default; **PULSE RUN** is a single-line time trial on real CTA
+rails. LIVE feeds optional later.
 
 **Unofficial fan project — not affiliated with the Chicago Transit Authority.**
 
 ## How it works
 
 - **Motion:** tip-only pulses race CTA GTFS track polylines (deck.gl `TripsLayer`).
+- **Pulse Run:** pick a challenge → you *are* the bolt on one line (boost / reverse / timer).
 - **Stage:** MapLibre + OpenFreeMap (keyless), cold steel palette; downtown mass from
   **OSM footprints × City of Chicago stories** (honest heights, realistic shapes).
 - **Camera:** hard stop at **Chicagoland / Cook metro** (`maxBounds` + min zoom).

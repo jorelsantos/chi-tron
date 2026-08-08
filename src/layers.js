@@ -52,6 +52,9 @@ export function rgbString(color) {
 // Keep in sync with PulseEngine.PULSE_TRAIL_SECONDS.
 // Tip-only aesthetic: trail *is* the vehicle (no disc heads).
 const TRAIL_LENGTH = 8;
+// Pulse Run player bolt — dedicated layer (wider/longer); tip-only, no disc.
+// Keep in sync with PlayerBolt.PLAYER_TRAIL_SECONDS (~11).
+const PLAYER_TRAIL_LENGTH = 11;
 
 // U9 (R4, KTD12): buses read as a cool ice-blue/silver capsule against the
 // trains' saturated line-color-plus-hot-white-core treatment. Hue ~225°
@@ -210,6 +213,9 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
     zoom = 0,
     lineStatus = {},
     accessibilityStations = EMPTY_SET,
+    // Pulse Run: tip-only player vehicle (or null). Always a stable layer slot.
+    player = null,
+    playerTrailVersion = 0,
   } = options;
 
   // U12's DISPLAY toggles: `trains`/`stations` off means "don't draw this
@@ -244,6 +250,21 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   void getShownStations;
   void display.stations;
 
+  // Player bolt: always a layer (empty data in GRID) so layer count is stable.
+  const shownPlayer =
+    player?.pos && Array.isArray(player.trail) && player.trail.length >= 2 ? [player] : [];
+
+  const additiveTrailParams = {
+    depthTest: false,
+    blend: true,
+    blendColorOperation: 'add',
+    blendColorSrcFactor: 'src-alpha',
+    blendColorDstFactor: 'one',
+    blendAlphaOperation: 'add',
+    blendAlphaSrcFactor: 'src-alpha',
+    blendAlphaDstFactor: 'one',
+  };
+
   return [
     new TripsLayer({
       id: 'trails',
@@ -262,16 +283,28 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       opacity: 1,
       updateTriggers: { getPath: trailVersion, getTimestamps: trailVersion },
       // R3: additive so two trails crossing sum brightness — light-cycle look.
-      parameters: {
-        depthTest: false,
-        blend: true,
-        blendColorOperation: 'add',
-        blendColorSrcFactor: 'src-alpha',
-        blendColorDstFactor: 'one',
-        blendAlphaOperation: 'add',
-        blendAlphaSrcFactor: 'src-alpha',
-        blendAlphaDstFactor: 'one',
+      parameters: additiveTrailParams,
+    }),
+    // Pulse Run: dedicated hotter/wider tip-only trail (never a disc head).
+    new TripsLayer({
+      id: 'player-trail',
+      data: shownPlayer,
+      getPath: (d) => d.trail.map((p) => [p.lon, p.lat]),
+      getTimestamps: (d) => d.trail.map((p) => p.t),
+      getColor: (d) => {
+        const c = LINE_COLORS[d.line] ?? [255, 255, 255];
+        return [c[0], c[1], c[2], 255];
       },
+      currentTime,
+      trailLength: PLAYER_TRAIL_LENGTH,
+      fadeTrail: true,
+      capRounded: true,
+      jointRounded: true,
+      widthMinPixels: 9,
+      widthMaxPixels: 22,
+      opacity: 1,
+      updateTriggers: { getPath: playerTrailVersion, getTimestamps: playerTrailVersion },
+      parameters: additiveTrailParams,
     }),
     // U9: buses' own dimmer, shorter, single-pass trail — no 3-layer
     // glow-head stack like trains get (KTD12). Standard (non-additive)

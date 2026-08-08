@@ -17,6 +17,8 @@ import { CarEngine } from './cars.js';
 import { AlertsEngine } from './alerts.js';
 import { buildLayers, LINE_COLORS, rgbString, lineStressTreatment } from './layers.js';
 import { createHud } from './hud.js';
+import { prepareLine, pointAtDist } from './tracks.js';
+import { RunSession } from './pulse-run/run-session.js';
 
 // Design-first pass: always aesthetic simulation. LIVE is dormant (R1/R2).
 // `?live=1` is ignored so deep links cannot start polling.
@@ -36,11 +38,23 @@ function renderFeedStatus(el, state, labels) {
   // U14: 'hold' is the poll governor's BUDGET HOLD state (src/poller.js) —
   // the feed hit its self-imposed daily ceiling (R10) and has stopped
   // issuing requests until the ledger's local date rolls over.
-  el.className = `hud ${state === 'lost' ? 'lost' : state === 'hold' ? 'hold' : state === 'disabled' ? 'disabled' : 'live'}`;
+  el.className = `hud ${
+    state === 'lost' ? 'lost'
+      : state === 'hold' ? 'hold'
+        : state === 'disabled' ? 'disabled'
+          : state === 'run' ? 'run'
+            : 'live'
+  }`;
   el.textContent = labels[state] ?? labels.live;
 }
 
-const TRAIN_STATUS_LABELS = { mock: 'SIM MODE', lost: 'SIGNAL LOST', hold: 'BUDGET HOLD', live: 'LIVE FEED' };
+const TRAIN_STATUS_LABELS = {
+  mock: 'SIM MODE',
+  lost: 'SIGNAL LOST',
+  hold: 'BUDGET HOLD',
+  live: 'LIVE FEED',
+  run: 'PULSE RUN',
+};
 function setStatus(state) {
   feedStatus = state;
   renderFeedStatus(statusEl, state, TRAIN_STATUS_LABELS);
@@ -254,12 +268,17 @@ async function boot() {
 
   // Tip-only Tron pulses — trail is the vehicle (no disc heads).
   const engine = new PulseEngine(tracks);
+  const runSession = new RunSession(tracks);
   const trackKeys = Object.keys(tracks);
   const visibleLines = new Set(trackKeys);
   const lastStressOpacity = new Map();
   const display = { trains: true, buses: true, cars: true, buildings: true, stations: false };
 
+  /** @type {{ display: object } | null} */
+  let runSnapshot = null;
   let followed = null;
+  let keys = { space: false };
+  let resultShownForPhase = null;
 
   function releaseFollow() {
     if (!followed) return;
@@ -267,13 +286,171 @@ async function boot() {
     hud.setFollowLabel(null);
   }
 
-  function trailingId(id) {
-    return String(id).replace(/^pulse-/, '').replace(/^mock-/, '').split('-').pop();
-  }
-
   function followVehicle(kind, id, label) {
     followed = { kind, id };
     hud.setFollowLabel(label);
+  }
+
+  function stationsReady() {
+    return stations && Object.keys(stations).length > 0;
+  }
+
+  function sampleSegmentCoords(lineKey, startDist, goalDist, stepM = 25) {
+    const prepared = prepareLine(tracks[lineKey]);
+    const a = Math.min(startDist, goalDist);
+    const b = Math.max(startDist, goalDist);
+    const coords = [];
+    for (let d = a; d <= b; d += stepM) {
+      coords.push(pointAtDist(prepared, d));
+    }
+    coords.push(pointAtDist(prepared, b));
+    return coords;
+  }
+
+  function setChallengeSegment(lineKey, startDist, goalDist) {
+    const color = LINE_COLORS[lineKey] ? rgbString(LINE_COLORS[lineKey]) : 'rgb(0,212,255)';
+    const coords = sampleSegmentCoords(lineKey, startDist, goalDist);
+    const data = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { color },
+          geometry: { type: 'LineString', coordinates: coords },
+        },
+      ],
+    };
+    if (!map.getSource('run-segment')) {
+      map.addSource('run-segment', { type: 'geojson', data });
+      map.addLayer({
+        id: 'run-segment-glow',
+        type: 'line',
+        source: 'run-segment',
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-opacity': 0.55,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 6, 16, 16],
+          'line-blur': 2.5,
+        },
+      });
+      map.addLayer({
+        id: 'run-segment-core',
+        type: 'line',
+        source: 'run-segment',
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-opacity': 0.95,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1.2, 16, 3],
+        },
+      });
+    } else {
+      map.getSource('run-segment').setData(data);
+      if (map.getLayer('run-segment-glow')) {
+        map.setLayoutProperty('run-segment-glow', 'visibility', 'visible');
+        map.setLayoutProperty('run-segment-core', 'visibility', 'visible');
+      }
+    }
+  }
+
+  function clearChallengeSegment() {
+    if (map.getLayer('run-segment-glow')) {
+      map.setLayoutProperty('run-segment-glow', 'visibility', 'none');
+      map.setLayoutProperty('run-segment-core', 'visibility', 'none');
+    }
+  }
+
+  function dimTracksForRun(challengeLine) {
+    if (!map.getSource('l-tracks')) return;
+    for (const key of trackKeys) {
+      const mult = key === challengeLine ? 1 : 0.4;
+      map.setFeatureState({ source: 'l-tracks', id: key }, { stressOpacity: mult });
+      lastStressOpacity.set(key, mult);
+    }
+  }
+
+  function enterRun(challengeId) {
+    if (!stationsReady()) return;
+    if (runSession.active) return;
+    const result = runSession.start(challengeId, stations);
+    if (!result.ok) {
+      console.warn('[chi-tron] Pulse Run start failed:', result.error);
+      return;
+    }
+    runSnapshot = {
+      display: { ...display },
+    };
+    releaseFollow();
+    display.buses = false;
+    display.cars = false;
+    display.trains = true;
+    map.dragPan.disable();
+    keys.space = false;
+
+    const { challenge, baked, playerBolt } = {
+      challenge: runSession.challenge,
+      baked: runSession.baked,
+      playerBolt: runSession.player,
+    };
+    setChallengeSegment(challenge.line, baked.startDist, baked.goalDist);
+    dimTracksForRun(challenge.line);
+    // Own-the-wire: no ambient pulses on challenge line
+    engine.seed(3);
+    for (const [id, p] of [...engine.pulses.entries()]) {
+      if (p.line === challenge.line) engine.pulses.delete(id);
+    }
+
+    const cam = playerBolt.cameraTarget();
+    map.jumpTo({
+      center: cam.center,
+      zoom: Math.max(map.getZoom(), 14.5),
+      pitch: 58,
+      bearing: cam.bearing,
+    });
+
+    setStatus('run');
+    hud.showRunPanel(challenge);
+    hud.hideResult();
+    resultShownForPhase = null;
+    hud.setFollowLabel(`PULSE · ${challenge.line.toUpperCase()}`);
+  }
+
+  function exitRun() {
+    if (!runSession.active && !runSnapshot) {
+      hud.hideRunPanel();
+      return;
+    }
+    runSession.exit();
+    if (runSnapshot) {
+      Object.assign(display, runSnapshot.display);
+      runSnapshot = null;
+    }
+    clearChallengeSegment();
+    engine.seed(3);
+    map.dragPan.enable();
+    keys.space = false;
+    resultShownForPhase = null;
+    hud.hideRunPanel();
+    hud.setFollowLabel(null);
+    setStatus('mock');
+    // restore stress opacity baseline
+    lastStressOpacity.clear();
+  }
+
+  function retryRun() {
+    if (!runSession.active && !runSession.challenge) return;
+    if (!runSession.challenge) return;
+    runSession.retry();
+    keys.space = false;
+    resultShownForPhase = null;
+    hud.hideResult();
+    const cam = runSession.player.cameraTarget();
+    map.jumpTo({
+      center: cam.center,
+      zoom: Math.max(map.getZoom(), 14.5),
+      pitch: 58,
+      bearing: cam.bearing,
+    });
+    hud.showRunPanel(runSession.challenge);
   }
 
   const hud = createHud({
@@ -284,7 +461,26 @@ async function boot() {
     trackGlowLayerIds: TRACK_GLOW_LAYER_IDS,
     getStatus: () => feedStatus,
     onReleaseFollow: releaseFollow,
+    isStationsReady: stationsReady,
+    isRunActive: () => runSession.active,
+    onAppModeChange: (mode) => {
+      if (mode === 'grid') exitRun();
+    },
+    onStartChallenge: (id) => enterRun(id),
+    onRetryRun: () => retryRun(),
+    onExitRun: () => {
+      exitRun();
+      hud.setAppModeUi('grid');
+    },
   });
+
+  // stations may arrive after boot — refresh challenge buttons
+  const stationsReadyPoll = setInterval(() => {
+    if (stationsReady()) {
+      hud.setStationsReadyUi();
+      clearInterval(stationsReadyPoll);
+    }
+  }, 200);
 
   loadChicagoBuildings = () => {
     fetch('/data/buildings.json')
@@ -301,6 +497,7 @@ async function boot() {
 
   // Tip-only: no train head layer to pick — bus/car follow still works.
   function handleVehicleClick(info) {
+    if (runSession.active) return;
     if (!info.picked || !info.object) {
       releaseFollow();
       return;
@@ -316,7 +513,43 @@ async function boot() {
   }
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') releaseFollow();
+    if (e.code === 'Space') {
+      if (runSession.active) {
+        e.preventDefault();
+        keys.space = true;
+        runSession.setBoosting(true);
+      }
+      return;
+    }
+    if (e.key === 'r' || e.key === 'R') {
+      if (runSession.phase === 'running') {
+        e.preventDefault();
+        runSession.reverse();
+      }
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (runSession.phase === 'finished' || runSession.phase === 'failed') {
+        e.preventDefault();
+        retryRun();
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (runSession.active) {
+        e.preventDefault();
+        exitRun();
+        hud.setAppModeUi('grid');
+        return;
+      }
+      releaseFollow();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') {
+      keys.space = false;
+      runSession.setBoosting(false);
+    }
   });
 
   overlay.setProps({ onClick: handleVehicleClick });
@@ -358,7 +591,43 @@ async function boot() {
       fpsEl.textContent = `${Math.round(fps)} FPS`;
     }
 
-    const trains = engine.tick();
+    const runSnap = runSession.active ? runSession.tick() : null;
+    if (runSnap) {
+      runSession.setBoosting(keys.space);
+      hud.updateRunTimer(runSnap.elapsedS);
+      if (runSnap.phase === 'countdown') {
+        const color = LINE_COLORS[runSnap.challenge.line];
+        hud.showCountdown(runSnap.countdownLeft, color);
+      } else {
+        hud.hideCountdown();
+      }
+      if (
+        (runSnap.phase === 'finished' || runSnap.phase === 'failed') &&
+        resultShownForPhase !== runSnap.phase
+      ) {
+        // Finish freeze: wait briefly before showing card
+        if (performance.now() >= (runSnap.finishFreezeUntil || 0)) {
+          resultShownForPhase = runSnap.phase;
+          hud.showResult({
+            grade: runSnap.grade,
+            elapsedS: runSnap.elapsedS,
+            share: runSnap.share,
+            failed: runSnap.phase === 'failed',
+          });
+        }
+      }
+      if (runSnap.playerBolt) {
+        const cam = runSnap.playerBolt.cameraTarget();
+        map.setCenter(cam.center);
+        map.setBearing(cam.bearing);
+      }
+    }
+
+    let trains = engine.tick();
+    // Own-the-wire: suppress ambient pulses on the challenge line during RUN
+    if (runSnap?.challenge) {
+      trains = trains.filter((p) => p.line !== runSnap.challenge.line);
+    }
     // busEngine/carEngine are null until their build artifact resolves (or
     // forever, if it failed to load — see the guarded fetches above); an
     // empty array here keeps buildLayers()'s "off = empty data, not an
@@ -377,20 +646,21 @@ async function boot() {
     // frame's list at all, which covers both "stale/removed" and "a mode
     // switch cleared it" with the same one check, since either way it's
     // just absent now.
-    if (followed) {
+    if (followed && !runSession.active) {
       const list = followed.kind === 'train' ? trains : followed.kind === 'bus' ? buses : cars;
       const vehicle = list.find((v) => v.id === followed.id);
       if (vehicle?.pos) map.setCenter(vehicle.pos);
       else releaseFollow();
     }
 
-    hud.tick(trains);
+    hud.tick(runSnap?.player ? [...trains, runSnap.player] : trains);
     const center = map.getCenter();
     const currentTime = now();
     // U15: pushes each line's current opacity pulse onto its l-tracks-* GeoJSON
     // feature every frame — see addTrackUnderglow()'s stressOpacity comment for
     // why this is opacity-only, not a color change, on this particular layer.
-    if (map.getSource('l-tracks')) {
+    // During RUN we own stressOpacity for dimming; skip alert pulse overwrite.
+    if (map.getSource('l-tracks') && !runSession.active) {
       for (const key of trackKeys) {
         const tag = alertsEngine.lineStatus[key] ?? 'normal';
         const opacityMult = lineStressTreatment(tag, currentTime).opacityMult;
@@ -411,6 +681,8 @@ async function boot() {
         zoom: map.getZoom(),
         lineStatus: alertsEngine.lineStatus,
         accessibilityStations: alertsEngine.stationFlags,
+        player: runSnap?.player ?? null,
+        playerTrailVersion: runSession.player?.trailVersion ?? 0,
       }),
     });
     requestAnimationFrame(frame);
@@ -420,6 +692,7 @@ async function boot() {
   window.__map = map;
   window.__engine = engine;
   window.__hud = hud;
+  window.__runSession = runSession;
   window.__busEngine = () => busEngine;
   window.__carEngine = () => carEngine;
   window.__alertsEngine = alertsEngine;
