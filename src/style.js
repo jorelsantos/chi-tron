@@ -20,14 +20,14 @@ export const CITY_PRESET = {
 export const HEIGHT_EXAGGERATION = 1.9;
 export const CROWN_LIGHT_DELTA = 14;
 
-// Phase C: hard camera stop at Illinois — no other states.
-// SW → NE [lon, lat]; light pad so UI chrome doesn't clip the border.
-export const ILLINOIS_BOUNDS = [
-  [-91.55, 36.95],
-  [-87.0, 42.55],
+// Phase C: hard camera stop at Chicagoland (Cook + near collar), not full IL.
+// SW → NE [lon, lat]; pad so UI chrome doesn't clip the border.
+export const CHICAGOLAND_BOUNDS = [
+  [-88.55, 41.35],
+  [-87.4, 42.35],
 ];
-// Most zoomed-out view ≈ full state (not Midwest / national).
-export const ILLINOIS_MIN_ZOOM = 6.2;
+// Most zoomed-out view ≈ metro Chicago (L network still readable as a system).
+export const CHICAGOLAND_MIN_ZOOM = 8.5;
 const BUILDING_FILTER = ['!=', ['get', 'hide_3d'], true];
 const RENDER_HEIGHT = ['coalesce', ['get', 'render_height'], 8];
 const EXAGGERATED_HEIGHT = ['*', RENDER_HEIGHT, HEIGHT_EXAGGERATION];

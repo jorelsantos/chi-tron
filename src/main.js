@@ -5,8 +5,8 @@ import {
   DARK_CITY_STYLE,
   FALLBACK_STYLE,
   LOOP_PRESET,
-  ILLINOIS_BOUNDS,
-  ILLINOIS_MIN_ZOOM,
+  CHICAGOLAND_BOUNDS,
+  CHICAGOLAND_MIN_ZOOM,
   HEIGHT_EXAGGERATION,
   CROWN_LIGHT_DELTA,
 } from './style.js';
@@ -130,14 +130,14 @@ async function boot() {
     pitch: LOOP_PRESET.pitch,
     bearing: LOOP_PRESET.bearing,
     maxPitch: 70,
-    minZoom: ILLINOIS_MIN_ZOOM,
-    maxBounds: ILLINOIS_BOUNDS,
+    minZoom: CHICAGOLAND_MIN_ZOOM,
+    maxBounds: CHICAGOLAND_BOUNDS,
     antialias: true,
     attributionControl: { compact: true },
   });
-  // Phase C: Illinois hard stop (also re-assert after style swap).
-  map.setMaxBounds(ILLINOIS_BOUNDS);
-  map.setMinZoom(ILLINOIS_MIN_ZOOM);
+  // Phase C: Chicagoland hard stop (also re-assert after style swap).
+  map.setMaxBounds(CHICAGOLAND_BOUNDS);
+  map.setMinZoom(CHICAGOLAND_MIN_ZOOM);
   new ResizeObserver(() => map.resize()).observe(document.getElementById('map'));
   requestAnimationFrame(() => requestAnimationFrame(() => map.resize()));
 
@@ -200,8 +200,8 @@ async function boot() {
       },
     });
   }
-  // Phase B: real Chicago footprints (stories → height). Same cold-steel
-  // paint as OFM extrusions; OFM buildings hidden once city data is on.
+  // Phase B: OSM shapes × City stories (honest heights). Same cold-steel
+  // paint as OFM extrusions. OFM stays on outside the bake so CITY isn't void.
   function addChicagoBuildings(geojson) {
     if (map.getSource('chi-buildings')) return;
     map.addSource('chi-buildings', { type: 'geojson', data: geojson });
@@ -232,10 +232,7 @@ async function boot() {
         'fill-extrusion-opacity': 0.58,
       },
     });
-    // Demote generic OpenFreeMap blocks so real skyline owns downtown mass.
-    for (const id of ['buildings-3d', 'buildings-3d-crown']) {
-      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
-    }
+    // Chi sits on top of OFM downtown; leave OFM visible for metro outside bake.
     // Keep track glow above building mass.
     for (const id of TRACK_GLOW_LAYER_IDS) {
       if (map.getLayer(id)) map.moveLayer(id);
@@ -247,8 +244,8 @@ async function boot() {
     addTrackUnderglow();
     map.resize();
     map.jumpTo(LOOP_PRESET);
-    map.setMaxBounds(ILLINOIS_BOUNDS);
-    map.setMinZoom(ILLINOIS_MIN_ZOOM);
+    map.setMaxBounds(CHICAGOLAND_BOUNDS);
+    map.setMinZoom(CHICAGOLAND_MIN_ZOOM);
     loadChicagoBuildings?.();
   });
 
