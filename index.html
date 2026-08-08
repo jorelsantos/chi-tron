@@ -40,7 +40,6 @@
        ceiling (R10) and stopped issuing requests. Amber so it reads as a
        deliberate, safe stop rather than the failure states green/red imply. */
     #status.hold { color: #ffb020; text-shadow: 0 0 6px rgba(255, 176, 32, 0.6); }
-    #status.run { color: var(--neon-cyan); text-shadow: 0 0 8px rgba(0, 212, 255, 0.65); }
     #fps {
       top: 66px; right: 24px;
       font-size: 10px; letter-spacing: 0.2em; color: rgba(140, 160, 200, 0.5);
@@ -257,115 +256,119 @@
       box-shadow: 0 0 10px rgba(0, 212, 255, 0.7);
     }
 
-    /* Pulse Run — GRID | PULSE RUN mode strip (not LIVE EXPLORE) */
-    #app-mode-section { margin-bottom: 4px; }
-    #app-mode-rows { display: flex; gap: 6px; }
-    .app-mode-btn {
-      flex: 1 1 0; border: 1px solid rgba(160, 190, 255, 0.25); border-radius: 5px;
-      padding: 8px 6px; background: rgba(5, 8, 17, 0.55);
-      color: var(--hud-dim); font-family: inherit; font-weight: 700;
-      font-size: 11px; letter-spacing: 0.14em; text-align: center; cursor: pointer;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    /* Live Nav — map-first chrome (Maps / Pokémon Go) */
+    #sidebar.nav-compact {
+      display: none; /* map is the product; instrument dock hidden on MVP */
     }
-    .app-mode-btn:hover { background: rgba(5, 8, 17, 0.8); }
-    .app-mode-btn[aria-pressed="true"] {
-      background: rgba(0, 212, 255, 0.16);
-      border-color: rgba(0, 212, 255, 0.6);
-      color: #fff;
-      text-shadow: 0 0 6px rgba(0, 212, 255, 0.6);
-    }
-    .app-mode-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    #wordmark small { letter-spacing: 0.28em; }
+    #wordmark small::after { content: " · ORANGE LIVE"; }
 
-    #pulse-run-section { display: none; }
-    #pulse-run-section.visible { display: block; }
-    #challenge-rows { display: flex; flex-direction: column; gap: 4px; }
-    .challenge-row {
-      display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-      width: 100%; border: 1px solid transparent; border-radius: 5px;
-      padding: 8px; background: rgba(5, 8, 17, 0.55);
-      color: #cfe0ff; font-family: inherit; font-size: 11px; letter-spacing: 0.04em;
-      text-align: left; cursor: pointer;
+    #fab-locate {
+      position: absolute; z-index: 15; right: 18px; bottom: 28px;
+      width: 52px; height: 52px; border-radius: 50%;
+      border: 1px solid rgba(66, 133, 244, 0.55);
+      background: rgba(6, 10, 20, 0.88);
+      color: #8ab4f8;
+      font-size: 22px; cursor: pointer;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+      pointer-events: auto;
+      backdrop-filter: blur(10px);
     }
-    .challenge-row:hover { background: rgba(5, 8, 17, 0.85); border-color: rgba(0, 212, 255, 0.35); }
-    .challenge-row .ch-label { font-weight: 700; letter-spacing: 0.12em; font-size: 10px; }
-    .challenge-row .ch-route { color: var(--hud-dim); font-size: 10px; }
-    .challenge-row .ch-badge {
-      width: 8px; height: 8px; border-radius: 50%; display: inline-block;
-      margin-right: 6px; box-shadow: 0 0 6px var(--line-color); background: var(--line-color);
-    }
+    #fab-locate:hover { background: rgba(20, 40, 80, 0.95); color: #fff; }
 
-    #run-panel {
-      display: none; margin-top: 10px; padding-top: 10px;
-      border-top: 1px solid rgba(160, 190, 255, 0.15);
-    }
-    #run-panel.visible { display: block; }
-    #run-panel .run-meta {
-      font-size: 10px; letter-spacing: 0.1em; color: var(--hud-dim); margin-bottom: 6px;
-    }
-    #run-panel .run-timer {
-      font-size: 22px; letter-spacing: 0.12em; color: var(--neon-cyan);
-      text-shadow: 0 0 8px rgba(0, 212, 255, 0.55); margin-bottom: 4px;
-    }
-    #run-panel .run-par { font-size: 9px; letter-spacing: 0.16em; color: var(--hud-dim); margin-bottom: 10px; }
-    #run-panel .run-actions { display: flex; gap: 6px; }
-    #run-panel .run-actions button {
-      flex: 1; border: 1px solid rgba(160, 190, 255, 0.3); border-radius: 4px;
-      padding: 7px 6px; background: rgba(255, 255, 255, 0.06);
-      color: #cfe0ff; font-family: inherit; font-size: 10px; letter-spacing: 0.14em;
-      cursor: pointer;
-    }
-    #run-panel .run-actions button:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
-    #run-controls-hint {
-      margin-top: 8px; font-size: 8px; letter-spacing: 0.1em; color: rgba(140, 160, 200, 0.55);
-      line-height: 1.4;
-    }
-
-    #countdown-overlay {
-      position: absolute; inset: 0; z-index: 20; pointer-events: none;
-      display: none; align-items: center; justify-content: center;
+    #nearest-chip, #loc-chip {
+      position: absolute; z-index: 15; left: 50%; transform: translateX(-50%);
+      bottom: 36px; display: none; pointer-events: auto;
+      padding: 10px 16px; border-radius: 20px;
       font-family: "SF Mono", "Menlo", monospace;
-      font-size: 96px; font-weight: 700; letter-spacing: 0.12em;
-      color: var(--neon-cyan);
-      text-shadow: 0 0 20px rgba(0, 212, 255, 0.85), 0 0 60px rgba(0, 212, 255, 0.4);
+      font-size: 12px; letter-spacing: 0.06em;
+      background: rgba(6, 10, 20, 0.9);
+      border: 1px solid rgba(255, 120, 40, 0.45);
+      color: #ffd0a8; cursor: pointer;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
     }
-    #countdown-overlay.visible { display: flex; }
+    #nearest-chip.visible, #loc-chip.visible { display: block; }
+    #loc-chip {
+      top: 88px; bottom: auto; border-color: rgba(160, 190, 255, 0.35); color: var(--hud-dim); cursor: default;
+    }
+    #station-sheet.open ~ #nearest-chip { bottom: min(42vh, 280px); }
 
-    #result-card {
-      position: absolute; z-index: 21; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      display: none; flex-direction: column; align-items: center; gap: 10px;
-      min-width: 280px; padding: 22px 28px; pointer-events: auto;
-      background: linear-gradient(160deg, rgba(6, 9, 18, 0.92), rgba(4, 6, 13, 0.85));
-      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(0, 212, 255, 0.4); border-radius: 10px;
-      box-shadow: 0 0 40px rgba(0, 212, 255, 0.12), 0 12px 40px rgba(0, 0, 0, 0.55);
-      font-family: "SF Mono", "Menlo", monospace; text-align: center;
+    #station-sheet {
+      position: absolute; z-index: 16; left: 0; right: 0; bottom: 0;
+      max-height: 42vh;
+      transform: translateY(110%);
+      transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+      pointer-events: none;
+      background: linear-gradient(180deg, rgba(8, 12, 22, 0.94), rgba(4, 6, 14, 0.97));
+      border-top: 1px solid rgba(255, 120, 40, 0.4);
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      font-family: "SF Mono", "Menlo", monospace;
+      color: #e8eefc;
+      padding: 10px 16px 20px;
     }
-    #result-card.visible { display: flex; }
-    #result-card .result-title {
-      font-size: 11px; letter-spacing: 0.28em; color: var(--hud-dim);
+    #station-sheet.open { transform: translateY(0); pointer-events: auto; }
+    #sheet-handle {
+      width: 40px; height: 4px; border-radius: 2px; margin: 0 auto 12px;
+      background: rgba(160, 190, 255, 0.35);
     }
-    #result-card .result-grade {
-      font-size: 64px; font-weight: 700; letter-spacing: 0.08em; line-height: 1;
-      color: var(--neon-cyan);
-      text-shadow: 0 0 16px rgba(0, 212, 255, 0.7);
+    #sheet-header {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+      margin-bottom: 10px;
     }
-    #result-card .result-time {
-      font-size: 18px; letter-spacing: 0.16em; color: #cfe0ff;
+    #sheet-title {
+      font-size: 16px; font-weight: 700; letter-spacing: 0.04em; color: #fff;
     }
-    #result-card .result-share {
-      font-size: 10px; letter-spacing: 0.06em; color: var(--hud-dim);
-      max-width: 320px; word-break: break-word;
+    #sheet-meta {
+      font-size: 10px; letter-spacing: 0.16em; color: #ff9a4a; margin-top: 4px;
     }
-    #result-card .result-actions { display: flex; gap: 8px; margin-top: 6px; width: 100%; }
-    #result-card .result-actions button {
-      flex: 1; border: 1px solid rgba(0, 212, 255, 0.4); border-radius: 5px;
-      padding: 9px 10px; background: rgba(0, 212, 255, 0.12);
-      color: #fff; font-family: inherit; font-size: 10px; letter-spacing: 0.14em;
-      cursor: pointer;
+    #sheet-close {
+      border: 1px solid rgba(160, 190, 255, 0.3); border-radius: 6px;
+      background: rgba(255, 255, 255, 0.06); color: var(--hud-dim);
+      font-family: inherit; font-size: 11px; letter-spacing: 0.1em;
+      padding: 8px 10px; cursor: pointer; min-height: 44px;
     }
-    #result-card .result-actions button:hover { background: rgba(0, 212, 255, 0.22); }
-    #result-card.failed .result-grade { color: #ff5a6a; text-shadow: 0 0 16px rgba(255, 90, 106, 0.55); }
+    #sheet-updated {
+      font-size: 9px; letter-spacing: 0.14em; color: rgba(160, 190, 255, 0.5); margin-bottom: 8px;
+    }
+    #sheet-rows { overflow-y: auto; max-height: 28vh; display: flex; flex-direction: column; gap: 6px; }
+    .arrival-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-rows: auto auto;
+      gap: 2px 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .arrival-row.delayed { border-color: rgba(255, 176, 32, 0.45); }
+    .arr-dest { grid-column: 1; font-size: 13px; color: #cfe0ff; }
+    .arr-mins {
+      grid-column: 2; grid-row: 1 / span 2; align-self: center;
+      font-size: 22px; font-weight: 700; letter-spacing: 0.04em;
+      color: #fff; text-shadow: 0 0 12px rgba(255, 140, 50, 0.45);
+      font-variant-numeric: tabular-nums;
+    }
+    .arr-meta { grid-column: 1; font-size: 10px; color: rgba(160, 190, 255, 0.55); letter-spacing: 0.06em; }
+    .sheet-empty {
+      padding: 20px; text-align: center; color: var(--hud-dim);
+      letter-spacing: 0.16em; font-size: 11px;
+    }
+
+    @media (min-width: 900px) {
+      #station-sheet {
+        left: auto; right: 18px; bottom: 18px; width: 360px; max-height: 50vh;
+        border-radius: 12px; border: 1px solid rgba(255, 120, 40, 0.4);
+        transform: translateY(20px); opacity: 0;
+        transition: transform 0.22s ease, opacity 0.22s ease;
+      }
+      #station-sheet.open { transform: translateY(0); opacity: 1; }
+      #nearest-chip { bottom: 28px; left: 24px; transform: none; }
+      #station-sheet.open ~ #nearest-chip { bottom: 28px; }
+    }
 
     /* CRT overlays */
     #scanlines {
@@ -396,33 +399,10 @@
   <!-- U12: instrument sidebar. Row content (line rows + display toggles) is
        built by src/hud.js — this is just the docked glass shell. -->
   <div class="hud" id="sidebar">
-    <!-- LIVE EXPLORE mode stays dormant; this is GRID vs PULSE RUN. -->
+    <!-- MODE hidden this pass — always aesthetic sim (LIVE dormant). -->
     <div class="panel-section" id="mode-section" style="display:none" aria-hidden="true">
       <div id="mode-rows" role="group" aria-label="Explore or Live mode"></div>
       <div id="mode-fallback-note">LIVE UNAVAILABLE — FELL BACK TO EXPLORE</div>
-    </div>
-    <div class="panel-section" id="app-mode-section">
-      <div class="panel-header">
-        <span class="panel-title">MODE</span>
-      </div>
-      <div id="app-mode-rows" role="group" aria-label="Grid or Pulse Run mode"></div>
-    </div>
-    <div class="panel-section" id="pulse-run-section">
-      <div class="panel-header">
-        <span class="panel-title">CHALLENGES</span>
-        <span class="panel-scope" id="challenges-gate">LOADING</span>
-      </div>
-      <div id="challenge-rows" role="group" aria-label="Pulse Run challenges"></div>
-      <div id="run-panel">
-        <div class="run-meta" id="run-route">—</div>
-        <div class="run-timer" id="run-timer">0.0s</div>
-        <div class="run-par" id="run-par">PAR —</div>
-        <div class="run-actions">
-          <button type="button" id="run-retry">RETRY</button>
-          <button type="button" id="run-exit">EXIT</button>
-        </div>
-        <div id="run-controls-hint">HOLD boost · R reverse · Enter retry · Esc exit</div>
-      </div>
     </div>
     <div class="panel-section">
       <div class="panel-header">
@@ -475,17 +455,21 @@
     </svg>
   </div>
 
-  <div id="countdown-overlay" aria-hidden="true">3</div>
-  <div id="result-card" aria-live="polite">
-    <div class="result-title" id="result-title">RUN COMPLETE</div>
-    <div class="result-grade" id="result-grade">S</div>
-    <div class="result-time" id="result-time">0.0s</div>
-    <div class="result-share" id="result-share"></div>
-    <div class="result-actions">
-      <button type="button" id="result-copy">COPY SHARE</button>
-      <button type="button" id="result-retry">RETRY</button>
-      <button type="button" id="result-exit">EXIT</button>
+  <button type="button" class="hud" id="fab-locate" title="My location" aria-label="Center on my location">◎</button>
+  <div class="hud" id="loc-chip">LOCATION OFF</div>
+  <button type="button" class="hud" id="nearest-chip" aria-live="polite"></button>
+
+  <div id="station-sheet" role="dialog" aria-label="Station arrivals">
+    <div id="sheet-handle" aria-hidden="true"></div>
+    <div id="sheet-header">
+      <div>
+        <div id="sheet-title">Station</div>
+        <div id="sheet-meta">ORANGE</div>
+      </div>
+      <button type="button" id="sheet-close">CLOSE</button>
     </div>
+    <div id="sheet-updated">—</div>
+    <div id="sheet-rows" aria-live="polite"></div>
   </div>
 
   <div class="hud" id="disclaimer">UNOFFICIAL FAN PROJECT — NOT AFFILIATED WITH CTA</div>

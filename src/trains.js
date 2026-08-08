@@ -11,8 +11,10 @@ const POLL_MS = 5000;
 // in this Phase B pass, so their daily ceilings never share one counter.
 const TRAIN_LEDGER_KEY = 'cta-train';
 const STALE_POLLS = 2; // absent this many polls → stale → removed
-const TRAIL_SECONDS = 60; // history kept per train
-const ROUTES = ['red', 'blue', 'brn', 'g', 'org', 'p', 'pink', 'y'];
+const TRAIL_SECONDS = 45; // live train trail length (seconds of history)
+// Live Nav MVP: Orange Line only (budget + product focus). Phase 2 re-expands.
+export const LIVE_ROUTES = ['org'];
+const ROUTES = LIVE_ROUTES;
 // API route codes → tracks.json line keys
 const ROUTE_TO_LINE = {
   red: 'Red', blue: 'Blue', brn: 'Brn', g: 'G',
@@ -222,13 +224,22 @@ export class TrainEngine {
         seen.add(id);
         const snap = snapToLine(line, [lon, lat]);
         const existing = this.trains.get(id);
+        const meta = {
+          rn: String(t.rn ?? ''),
+          destNm: t.destNm ?? '',
+          nextStaNm: t.nextStaNm ?? '',
+          nextStaId: t.nextStaId ?? '',
+          heading: Number.isFinite(parseFloat(t.heading)) ? parseFloat(t.heading) : null,
+          arrT: t.arrT ?? '',
+          isDly: toBool(t.isDly),
+          isApp: toBool(t.isApp),
+        };
         if (existing) {
           existing.dirSign = snap.dist >= existing.targetDist ? 1 : -1;
           existing.targetDist = snap.dist;
           existing.state = 'tracking';
           existing.missedPolls = 0;
-          existing.isDly = toBool(t.isDly);
-          existing.isApp = toBool(t.isApp);
+          Object.assign(existing, meta);
         } else {
           this.trains.set(id, {
             id,
@@ -243,8 +254,7 @@ export class TrainEngine {
             missedPolls: 0,
             trail: [],
             pos: null,
-            isDly: toBool(t.isDly),
-            isApp: toBool(t.isApp),
+            ...meta,
           });
         }
       }

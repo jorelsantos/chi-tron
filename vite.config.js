@@ -7,11 +7,21 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       proxy: {
+        // NOTE: keep this path as exact `/api/tt` only — do NOT name arrivals
+        // `/api/ttarrivals` or Vite's prefix match will swallow it into ttpositions.
         '/api/tt': {
           target: 'https://lapi.transitchicago.com',
           changeOrigin: true,
           rewrite: (path) =>
             path.replace(/^\/api\/tt/, '/api/1.0/ttpositions.aspx') +
+            `&key=${env.CTA_KEY}`,
+        },
+        // Station board predictions (ttarrivals) — separate path avoids /api/tt collision.
+        '/api/arrivals': {
+          target: 'https://lapi.transitchicago.com',
+          changeOrigin: true,
+          rewrite: (path) =>
+            path.replace(/^\/api\/arrivals/, '/api/1.0/ttarrivals.aspx') +
             `&key=${env.CTA_KEY}`,
         },
         // U9: CTA Bus Tracker v3 (a distinct key/host from Train Tracker

@@ -22,8 +22,6 @@
 
 import { LOOP_PRESET, CITY_PRESET } from './style.js';
 import { LINE_KEYS, rgbString } from './layers.js';
-import { CHALLENGES } from './pulse-run/challenges.js';
-import { formatTime } from './pulse-run/scoring.js';
 
 const LINE_NAMES = {
   Red: 'Red Line',
@@ -79,13 +77,6 @@ export function createHud({
   getStatus,
   onReleaseFollow,
   trackMaps = [],
-  // Pulse Run hooks (optional — GRID-only if omitted)
-  onAppModeChange,
-  onStartChallenge,
-  onRetryRun,
-  onExitRun,
-  isStationsReady = () => false,
-  isRunActive = () => false,
 }) {
   const allTrackMaps = [map, ...trackMaps.filter((m) => m && m !== map)];
   const lineRowsEl = document.getElementById('line-rows');
@@ -103,143 +94,6 @@ export function createHud({
   function flashFallbackNote() {}
   const modeSection = document.getElementById('mode-section');
   if (modeSection) modeSection.style.display = 'none';
-
-  // ---- GRID | PULSE RUN -------------------------------------------------
-
-  let appMode = 'grid'; // 'grid' | 'pulse-run'
-  const appModeRows = document.getElementById('app-mode-rows');
-  const pulseRunSection = document.getElementById('pulse-run-section');
-  const challengeRows = document.getElementById('challenge-rows');
-  const challengesGate = document.getElementById('challenges-gate');
-  const runPanel = document.getElementById('run-panel');
-  const runRouteEl = document.getElementById('run-route');
-  const runTimerEl = document.getElementById('run-timer');
-  const runParEl = document.getElementById('run-par');
-  const countdownEl = document.getElementById('countdown-overlay');
-  const resultCard = document.getElementById('result-card');
-  const resultTitle = document.getElementById('result-title');
-  const resultGrade = document.getElementById('result-grade');
-  const resultTime = document.getElementById('result-time');
-  const resultShare = document.getElementById('result-share');
-
-  function setAppModeUi(mode) {
-    appMode = mode;
-    for (const btn of appModeRows?.querySelectorAll('.app-mode-btn') ?? []) {
-      btn.setAttribute('aria-pressed', String(btn.dataset.mode === mode));
-    }
-    pulseRunSection?.classList.toggle('visible', mode === 'pulse-run');
-  }
-
-  for (const { mode, label } of [
-    { mode: 'grid', label: 'GRID' },
-    { mode: 'pulse-run', label: 'PULSE RUN' },
-  ]) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'app-mode-btn';
-    btn.dataset.mode = mode;
-    btn.textContent = label;
-    btn.setAttribute('aria-pressed', String(mode === 'grid'));
-    btn.addEventListener('click', () => {
-      if (mode === appMode) return;
-      if (mode === 'grid' && isRunActive()) {
-        onExitRun?.();
-      }
-      setAppModeUi(mode);
-      onAppModeChange?.(mode);
-    });
-    appModeRows?.appendChild(btn);
-  }
-
-  function rebuildChallenges() {
-    if (!challengeRows) return;
-    challengeRows.replaceChildren();
-    const ready = isStationsReady();
-    if (challengesGate) challengesGate.textContent = ready ? 'READY' : 'LOADING';
-    for (const card of CHALLENGES) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'challenge-row';
-      btn.disabled = !ready || isRunActive();
-      const color = lineColors[card.line] ?? [0, 212, 255];
-      btn.style.setProperty('--line-color', rgbString(color));
-      btn.innerHTML = `<span class="ch-label"><span class="ch-badge"></span>${card.label}</span>
-        <span class="ch-route">${card.startName} → ${card.goalName}</span>`;
-      btn.addEventListener('click', () => {
-        if (!isStationsReady() || isRunActive()) return;
-        onStartChallenge?.(card.id);
-      });
-      challengeRows.appendChild(btn);
-    }
-  }
-  rebuildChallenges();
-
-  document.getElementById('run-retry')?.addEventListener('click', () => onRetryRun?.());
-  document.getElementById('run-exit')?.addEventListener('click', () => onExitRun?.());
-  document.getElementById('result-retry')?.addEventListener('click', () => onRetryRun?.());
-  document.getElementById('result-exit')?.addEventListener('click', () => onExitRun?.());
-  document.getElementById('result-copy')?.addEventListener('click', async () => {
-    const text = resultShare?.textContent ?? '';
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      /* ignore */
-    }
-  });
-
-  function setStationsReadyUi() {
-    rebuildChallenges();
-  }
-
-  function showRunPanel(challenge) {
-    if (!runPanel) return;
-    runPanel.classList.add('visible');
-    if (runRouteEl && challenge) {
-      runRouteEl.textContent = `${challenge.startName} → ${challenge.goalName}`;
-    }
-    if (runParEl && challenge) {
-      runParEl.textContent = `PAR ${formatTime(challenge.parTimeS)} · LIMIT ${formatTime(challenge.timeLimitS)}`;
-    }
-    rebuildChallenges();
-  }
-
-  function hideRunPanel() {
-    runPanel?.classList.remove('visible');
-    hideCountdown();
-    hideResult();
-    rebuildChallenges();
-  }
-
-  function updateRunTimer(elapsedS) {
-    if (runTimerEl) runTimerEl.textContent = formatTime(elapsedS);
-  }
-
-  function showCountdown(n, lineColor) {
-    if (!countdownEl) return;
-    countdownEl.classList.add('visible');
-    const shown = n <= 0 ? 'GO' : String(Math.ceil(n));
-    countdownEl.textContent = shown;
-    if (lineColor) countdownEl.style.color = rgbString(lineColor);
-  }
-
-  function hideCountdown() {
-    countdownEl?.classList.remove('visible');
-  }
-
-  function showResult({ grade, elapsedS, share, failed }) {
-    if (!resultCard) return;
-    resultCard.classList.add('visible');
-    resultCard.classList.toggle('failed', !!failed);
-    if (resultTitle) resultTitle.textContent = failed ? 'SIGNAL LOST' : 'RUN COMPLETE';
-    if (resultGrade) resultGrade.textContent = failed ? '—' : grade ?? 'C';
-    if (resultTime) resultTime.textContent = formatTime(elapsedS ?? 0);
-    if (resultShare) resultShare.textContent = share ?? '';
-  }
-
-  function hideResult() {
-    resultCard?.classList.remove('visible');
-  }
 
   // ---- LINES section -----------------------------------------------------
 
@@ -355,8 +209,6 @@ export function createHud({
   // sticky highlight would misreport the camera the instant the user pans
   // away (R7).
   function flyToPreset(btn, preset) {
-    // Pulse Run owns the camera — ignore presets while a run is active.
-    if (isRunActive()) return;
     // U17 step 5: a camera preset click releases follow mode first — R7's
     // "camera stays put" is overridden by follow, but a preset is an even
     // more explicit "take me somewhere specific" than free panning is, so
@@ -524,14 +376,5 @@ export function createHud({
     flashFallbackNote,
     setFollowLabel,
     getBounds,
-    setAppModeUi,
-    setStationsReadyUi,
-    showRunPanel,
-    hideRunPanel,
-    updateRunTimer,
-    showCountdown,
-    hideCountdown,
-    showResult,
-    hideResult,
   };
 }

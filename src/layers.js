@@ -52,9 +52,6 @@ export function rgbString(color) {
 // Keep in sync with PulseEngine.PULSE_TRAIL_SECONDS.
 // Tip-only aesthetic: trail *is* the vehicle (no disc heads).
 const TRAIL_LENGTH = 8;
-// Pulse Run player bolt — dedicated layer (wider/longer); tip-only, no disc.
-// Keep in sync with PlayerBolt.PLAYER_TRAIL_SECONDS (~11).
-const PLAYER_TRAIL_LENGTH = 11;
 
 // U9 (R4, KTD12): buses read as a cool ice-blue/silver capsule against the
 // trains' saturated line-color-plus-hot-white-core treatment. Hue ~225°
@@ -213,9 +210,9 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
     zoom = 0,
     lineStatus = {},
     accessibilityStations = EMPTY_SET,
-    // Pulse Run: tip-only player vehicle (or null). Always a stable layer slot.
-    player = null,
-    playerTrailVersion = 0,
+    // Live Nav: user geolocation fix { pos: [lon,lat], accuracyM } or null
+    user = null,
+    selectedStationId = null,
   } = options;
 
   // U12's DISPLAY toggles: `trains`/`stations` off means "don't draw this
@@ -244,26 +241,10 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   const headlights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, CAR_BODY_HALF_LEN_M));
   const taillights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, -CAR_BODY_HALF_LEN_M));
 
-  // Stations hard-off this pass (design: Tron grid, no ring punctuation).
-  const shownStations = [];
-  void stations;
-  void getShownStations;
-  void display.stations;
+  // Live Nav: show stations for visible lines (Org-only MVP via visibleLines).
+  const shownStations = getShownStations(stations, visibleLines, display);
 
-  // Player bolt: always a layer (empty data in GRID) so layer count is stable.
-  const shownPlayer =
-    player?.pos && Array.isArray(player.trail) && player.trail.length >= 2 ? [player] : [];
-
-  const additiveTrailParams = {
-    depthTest: false,
-    blend: true,
-    blendColorOperation: 'add',
-    blendColorSrcFactor: 'src-alpha',
-    blendColorDstFactor: 'one',
-    blendAlphaOperation: 'add',
-    blendAlphaSrcFactor: 'src-alpha',
-    blendAlphaDstFactor: 'one',
-  };
+  const userFixes = user?.pos ? [user] : [];
 
   return [
     new TripsLayer({
@@ -277,34 +258,21 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       fadeTrail: true,
       capRounded: true,
       jointRounded: true,
-      // Tip-only: hot trail so the moving tip reads without a disc head.
-      widthMinPixels: 5,
-      widthMaxPixels: 14,
+      // Live trains: hot trail tip is the vehicle.
+      widthMinPixels: 6,
+      widthMaxPixels: 16,
       opacity: 1,
       updateTriggers: { getPath: trailVersion, getTimestamps: trailVersion },
-      // R3: additive so two trails crossing sum brightness — light-cycle look.
-      parameters: additiveTrailParams,
-    }),
-    // Pulse Run: dedicated hotter/wider tip-only trail (never a disc head).
-    new TripsLayer({
-      id: 'player-trail',
-      data: shownPlayer,
-      getPath: (d) => d.trail.map((p) => [p.lon, p.lat]),
-      getTimestamps: (d) => d.trail.map((p) => p.t),
-      getColor: (d) => {
-        const c = LINE_COLORS[d.line] ?? [255, 255, 255];
-        return [c[0], c[1], c[2], 255];
+      parameters: {
+        depthTest: false,
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'src-alpha',
+        blendColorDstFactor: 'one',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'src-alpha',
+        blendAlphaDstFactor: 'one',
       },
-      currentTime,
-      trailLength: PLAYER_TRAIL_LENGTH,
-      fadeTrail: true,
-      capRounded: true,
-      jointRounded: true,
-      widthMinPixels: 9,
-      widthMaxPixels: 22,
-      opacity: 1,
-      updateTriggers: { getPath: playerTrailVersion, getTimestamps: playerTrailVersion },
-      parameters: additiveTrailParams,
     }),
     // U9: buses' own dimmer, shorter, single-pass trail — no 3-layer
     // glow-head stack like trains get (KTD12). Standard (non-additive)
@@ -396,49 +364,96 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       radiusMinPixels: 1.2,
       parameters: { depthTest: false },
     }),
-    // Tip-only: no train disc heads (layer ids kept empty for stable stack).
+    // Soft tip disc on live trains (pickable for run info).
     new ScatterplotLayer({
       id: 'glow-halo',
-      data: [],
+      data: shown,
       pickable: false,
       getPosition: (d) => d.pos,
-      getFillColor: [0, 0, 0, 0],
-      getRadius: 1,
+      getFillColor: (d) => {
+        const c = LINE_COLORS[d.line] ?? [255, 255, 255];
+        return [...c, 90];
+      },
+      getRadius: 14,
+      radiusMinPixels: 8,
+      radiusMaxPixels: 22,
       parameters: { depthTest: false },
+      updateTriggers: { getPosition: trailVersion, getFillColor: trailVersion },
     }),
     new ScatterplotLayer({
       id: 'glow-core',
-      data: [],
+      data: shown,
+      pickable: true,
       getPosition: (d) => d.pos,
-      getFillColor: [0, 0, 0, 0],
-      getRadius: 1,
+      getFillColor: [255, 255, 255, 240],
+      getRadius: 5,
+      radiusMinPixels: 3,
+      radiusMaxPixels: 8,
       parameters: { depthTest: false },
+      updateTriggers: { getPosition: trailVersion },
     }),
-    // Station layers intentionally empty this pass (shownStations = []).
+    // Orange stations — utility dots for nav (Maps place markers).
     new ScatterplotLayer({
       id: 'station-halo',
       data: shownStations,
+      pickable: false,
       getPosition: (d) => d.coords,
-      getFillColor: [0, 0, 0, 0],
-      getRadius: 1,
+      getFillColor: (d) =>
+        d.id === selectedStationId ? [255, 160, 60, 100] : [255, 120, 40, 50],
+      getRadius: (d) => (d.id === selectedStationId ? 22 : 14),
+      radiusMinPixels: 6,
+      radiusMaxPixels: 28,
       parameters: { depthTest: false },
+      updateTriggers: { getFillColor: selectedStationId, getRadius: selectedStationId },
     }),
     new ScatterplotLayer({
       id: 'station-ring',
       data: shownStations,
+      pickable: true,
       getPosition: (d) => d.coords,
-      getFillColor: [0, 0, 0, 0],
-      getRadius: 1,
+      getFillColor: (d) =>
+        d.id === selectedStationId ? [255, 180, 80, 255] : [255, 105, 28, 220],
+      getLineColor: [255, 255, 255, 200],
+      lineWidthMinPixels: 1,
+      stroked: true,
+      getRadius: (d) => (d.id === selectedStationId ? 9 : 6),
+      radiusMinPixels: 4,
+      radiusMaxPixels: 12,
       parameters: { depthTest: false },
+      updateTriggers: { getFillColor: selectedStationId, getRadius: selectedStationId },
     }),
     new ScatterplotLayer({
       id: 'station-accessibility',
-      data: [],
+      data: shownStations.filter((s) => accessibilityStations.has?.(s.id)),
       getPosition: (d) => d.coords,
-      getFillColor: [...ACCESSIBILITY_GLYPH_COLOR, 0],
-      getRadius: 1,
+      getFillColor: [...ACCESSIBILITY_GLYPH_COLOR, 220],
+      getRadius: 3,
+      radiusMinPixels: 2,
+      parameters: { depthTest: false },
+    }),
+    // Me-dot: Maps blue — never Orange (visual hierarchy law).
+    new ScatterplotLayer({
+      id: 'user-accuracy',
+      data: userFixes,
+      getPosition: (d) => d.pos,
+      getFillColor: [66, 133, 244, 40],
+      getRadius: (d) => Math.max(20, d.accuracyM ?? 30),
+      radiusUnits: 'meters',
+      radiusMinPixels: 12,
+      parameters: { depthTest: false },
+    }),
+    new ScatterplotLayer({
+      id: 'user-dot',
+      data: userFixes,
+      getPosition: (d) => d.pos,
+      getFillColor: [66, 133, 244, 255],
+      getLineColor: [255, 255, 255, 255],
+      lineWidthMinPixels: 2,
+      stroked: true,
+      getRadius: 8,
+      radiusMinPixels: 6,
+      radiusMaxPixels: 10,
       parameters: { depthTest: false },
     }),
   ];
-  void accessibilityStations;
 }
