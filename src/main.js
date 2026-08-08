@@ -16,6 +16,7 @@ import { buildLayers, LINE_COLORS, rgbString, lineStressTreatment } from './laye
 import { createHud } from './hud.js';
 import { ArrivalsSession } from './arrivals.js';
 import { startWatch, nearestStation, walkMinutes } from './geolocation.js';
+import { snapStationsToRails } from './stations-rail.js';
 
 // Live Nav MVP: Orange Line trains + station arrivals + user location.
 // Map-first (Maps / Pokémon Go philosophy).
@@ -77,18 +78,20 @@ async function boot() {
   // ever waits on the resource that's actually required.
   const tracksPromise = fetch('/data/tracks.json').then((r) => r.json());
   let stations = {};
-  fetch('/data/stations.json')
+  let stationsRaw = {};
+  const stationsPromise = fetch('/data/stations.json')
     .then((r) => (r.ok ? r.json() : {}))
-    .then((data) => {
-      stations = data; // picked up by frame()'s closure on the next tick
-    })
     .catch((err) => {
-      console.warn('[chi-tron] stations.json failed to load, station rings disabled:', err.message);
+      console.warn('[chi-tron] stations.json failed to load, station markers disabled:', err.message);
+      return {};
     });
 
   setBusStatus();
 
   const tracks = await tracksPromise;
+  stationsRaw = await stationsPromise;
+  // Snap markers onto rail geometry so the 3D world reads as one system.
+  stations = snapStationsToRails(tracks, stationsRaw);
 
   // Single full-bleed map — cold steel + cyan haze baseline, tip-only pulses.
   const map = new maplibregl.Map({
@@ -252,10 +255,11 @@ async function boot() {
   let selectedStationId = null;
   const arrivals = new ArrivalsSession();
 
-  const orgStations = () =>
+  // Walk distance uses GTFS (entrance) coords; map markers use rail-snapped coords.
+  const orgStationsForWalk = () =>
     Object.values(stations)
       .filter((s) => s.lines?.includes('Org'))
-      .map((s) => ({ ...s, id: s.id }));
+      .map((s) => ({ ...s, id: s.id, coords: s.gtfsCoords || s.coords }));
 
   function releaseFollow() {
     if (!followed) return;
@@ -343,7 +347,7 @@ async function boot() {
       nearestChip?.classList.remove('visible');
       return;
     }
-    const hit = nearestStation([userFix.lon, userFix.lat], orgStations());
+    const hit = nearestStation([userFix.lon, userFix.lat], orgStationsForWalk());
     if (!hit) {
       nearestChip.classList.remove('visible');
       return;

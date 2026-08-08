@@ -73,12 +73,14 @@ describe('buildLayers tip-only trains', () => {
     expect(layerById(layers, 'trails').props.data.length).toBe(0);
   });
 
-  it('shows stations when display.stations is true', () => {
+  it('shows station diamonds when display.stations is true', () => {
     const layers = buildLayers(trains, 0, visibleLines, {
       stations,
       display: { trains: false, stations: true },
     });
-    expect(layerById(layers, 'station-ring').props.data.length).toBe(1);
+    const ring = layerById(layers, 'station-ring');
+    expect(ring.props.data.length).toBe(1);
+    expect(ring.props.data[0].path?.length).toBeGreaterThanOrEqual(4);
   });
 
   it('draws user me-dot when user fix provided', () => {

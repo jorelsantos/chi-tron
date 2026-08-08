@@ -10,6 +10,7 @@ import { ScatterplotLayer, PathLayer } from '@deck.gl/layers';
 import { capBuses } from './buses.js';
 import { CAR_CAP } from './cars.js';
 import { mPerDegLon, M_PER_DEG_LAT } from './tracks.js';
+import { diamondRing } from './stations-rail.js';
 
 // Neon palette anchored to official CTA brand colors (transitchicago.com
 // developers/branding, 2026) then boosted for cyberpunk readability on a
@@ -47,11 +48,8 @@ export function rgbString(color) {
   return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 }
 
-// Aesthetic Tron pulses use a short bolt trail (matches PulseEngine.PULSE_TRAIL_SECONDS).
-// Live vehicle trains (dormant this pass) used ~45s; keep pulse-first.
-// Keep in sync with PulseEngine.PULSE_TRAIL_SECONDS.
-// Tip-only aesthetic: trail *is* the vehicle (no disc heads).
-const TRAIL_LENGTH = 8;
+// Live trains: longer additive trail so the tip reads as energy on the wire.
+const TRAIL_LENGTH = 14;
 
 // U9 (R4, KTD12): buses read as a cool ice-blue/silver capsule against the
 // trains' saturated line-color-plus-hot-white-core treatment. Hue ~225°
@@ -241,10 +239,25 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   const headlights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, CAR_BODY_HALF_LEN_M));
   const taillights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, -CAR_BODY_HALF_LEN_M));
 
-  // Live Nav: show stations for visible lines (Org-only MVP via visibleLines).
+  // Live Nav: stations should already be rail-snapped (main.js); still filter by line.
   const shownStations = getShownStations(stations, visibleLines, display);
+  const stationDiamonds = shownStations.map((s) => ({
+    ...s,
+    path: diamondRing(s.coords, s.id === selectedStationId ? 16 : 11),
+  }));
 
   const userFixes = user?.pos ? [user] : [];
+
+  const additiveParams = {
+    depthTest: false,
+    blend: true,
+    blendColorOperation: 'add',
+    blendColorSrcFactor: 'src-alpha',
+    blendColorDstFactor: 'one',
+    blendAlphaOperation: 'add',
+    blendAlphaSrcFactor: 'src-alpha',
+    blendAlphaDstFactor: 'one',
+  };
 
   return [
     new TripsLayer({
@@ -252,27 +265,21 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       data: shown,
       getPath: (d) => d.trail.map((p) => [p.lon, p.lat]),
       getTimestamps: (d) => d.trail.map((p) => p.t),
-      getColor: (d) => LINE_COLORS[d.line],
+      getColor: (d) => {
+        const c = LINE_COLORS[d.line] ?? [255, 255, 255];
+        return [c[0], c[1], c[2], 255];
+      },
       currentTime,
-      trailLength: TRAIL_LENGTH * 1.15,
+      trailLength: TRAIL_LENGTH,
       fadeTrail: true,
       capRounded: true,
       jointRounded: true,
-      // Live trains: hot trail tip is the vehicle.
-      widthMinPixels: 6,
-      widthMaxPixels: 16,
+      // Strong neon charge on the wire.
+      widthMinPixels: 8,
+      widthMaxPixels: 20,
       opacity: 1,
       updateTriggers: { getPath: trailVersion, getTimestamps: trailVersion },
-      parameters: {
-        depthTest: false,
-        blend: true,
-        blendColorOperation: 'add',
-        blendColorSrcFactor: 'src-alpha',
-        blendColorDstFactor: 'one',
-        blendAlphaOperation: 'add',
-        blendAlphaSrcFactor: 'src-alpha',
-        blendAlphaDstFactor: 'one',
-      },
+      parameters: additiveParams,
     }),
     // U9: buses' own dimmer, shorter, single-pass trail — no 3-layer
     // glow-head stack like trains get (KTD12). Standard (non-additive)
@@ -364,7 +371,7 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       radiusMinPixels: 1.2,
       parameters: { depthTest: false },
     }),
-    // Soft tip disc on live trains (pickable for run info).
+    // Train tip: outer line-color bloom + white core (charge on the wire).
     new ScatterplotLayer({
       id: 'glow-halo',
       data: shown,
@@ -372,12 +379,12 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       getPosition: (d) => d.pos,
       getFillColor: (d) => {
         const c = LINE_COLORS[d.line] ?? [255, 255, 255];
-        return [...c, 90];
+        return [c[0], c[1], c[2], 160];
       },
-      getRadius: 14,
-      radiusMinPixels: 8,
-      radiusMaxPixels: 22,
-      parameters: { depthTest: false },
+      getRadius: 18,
+      radiusMinPixels: 12,
+      radiusMaxPixels: 28,
+      parameters: additiveParams,
       updateTriggers: { getPosition: trailVersion, getFillColor: trailVersion },
     }),
     new ScatterplotLayer({
@@ -385,42 +392,43 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       data: shown,
       pickable: true,
       getPosition: (d) => d.pos,
-      getFillColor: [255, 255, 255, 240],
-      getRadius: 5,
-      radiusMinPixels: 3,
-      radiusMaxPixels: 8,
-      parameters: { depthTest: false },
+      getFillColor: [255, 255, 255, 255],
+      getRadius: 6,
+      radiusMinPixels: 4,
+      radiusMaxPixels: 10,
+      parameters: additiveParams,
       updateTriggers: { getPosition: trailVersion },
     }),
-    // Orange stations — utility dots for nav (Maps place markers).
-    new ScatterplotLayer({
+    // Stations: diamond nodes ON the rail (not freestanding discs).
+    new PathLayer({
       id: 'station-halo',
-      data: shownStations,
+      data: stationDiamonds,
       pickable: false,
-      getPosition: (d) => d.coords,
-      getFillColor: (d) =>
-        d.id === selectedStationId ? [255, 160, 60, 100] : [255, 120, 40, 50],
-      getRadius: (d) => (d.id === selectedStationId ? 22 : 14),
-      radiusMinPixels: 6,
-      radiusMaxPixels: 28,
+      getPath: (d) => d.path,
+      getColor: (d) =>
+        d.id === selectedStationId ? [255, 140, 50, 120] : [255, 105, 28, 55],
+      getWidth: (d) => (d.id === selectedStationId ? 10 : 6),
+      widthMinPixels: 3,
+      widthMaxPixels: 14,
+      jointRounded: false,
+      capRounded: false,
       parameters: { depthTest: false },
-      updateTriggers: { getFillColor: selectedStationId, getRadius: selectedStationId },
+      updateTriggers: { getColor: selectedStationId, getWidth: selectedStationId, getPath: selectedStationId },
     }),
-    new ScatterplotLayer({
+    new PathLayer({
       id: 'station-ring',
-      data: shownStations,
+      data: stationDiamonds,
       pickable: true,
-      getPosition: (d) => d.coords,
-      getFillColor: (d) =>
-        d.id === selectedStationId ? [255, 180, 80, 255] : [255, 105, 28, 220],
-      getLineColor: [255, 255, 255, 200],
-      lineWidthMinPixels: 1,
-      stroked: true,
-      getRadius: (d) => (d.id === selectedStationId ? 9 : 6),
-      radiusMinPixels: 4,
-      radiusMaxPixels: 12,
+      getPath: (d) => d.path,
+      getColor: (d) =>
+        d.id === selectedStationId ? [255, 200, 120, 255] : [255, 150, 70, 230],
+      getWidth: (d) => (d.id === selectedStationId ? 3.5 : 2.2),
+      widthMinPixels: 2,
+      widthMaxPixels: 6,
+      jointRounded: false,
+      capRounded: false,
       parameters: { depthTest: false },
-      updateTriggers: { getFillColor: selectedStationId, getRadius: selectedStationId },
+      updateTriggers: { getColor: selectedStationId, getWidth: selectedStationId, getPath: selectedStationId },
     }),
     new ScatterplotLayer({
       id: 'station-accessibility',
