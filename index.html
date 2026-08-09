@@ -4,56 +4,63 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CHI-TRON</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --neon-cyan: #00d4ff;
       --hud-dim: rgba(160, 190, 255, 0.55);
-      /* Liquid Glass Neon — clearer lens so map neon bleeds through */
-      --glass-fill: rgba(16, 20, 36, 0.38);
-      --glass-fill-strong: rgba(12, 16, 30, 0.52);
-      --glass-blur: 32px;
-      --glass-sat: 1.75;
-      --glass-bright: 1.1;
-      --glass-radius: 22px;
-      --glass-radius-sm: 16px;
+      /* Dark instrument glass — black frost + blur (not candy liquid glass) */
+      --glass-fill: rgba(0, 0, 0, 0.74);
+      --glass-fill-strong: rgba(0, 0, 0, 0.88);
+      --glass-blur: 40px;
+      --glass-sat: 1.05;
+      --glass-bright: 1.0;
+      --glass-radius: 20px;
+      --glass-radius-sm: 14px;
       --fab-size: 64px;
-      /* Tron accents on glass (Phase B) — subtle, not nightclub */
+      --font-ui: "Space Grotesk", system-ui, -apple-system, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+      /* Tron accents — neon for data only, not panel frames */
       --tron-org: #ff8c3c;
       --tron-cyan: #00d4ff;
-      --tron-glow-org: rgba(255, 110, 40, 0.22);
-      --tron-glow-cyan: rgba(0, 212, 255, 0.2);
-      --tron-rail: rgba(255, 140, 60, 0.85);
+      --tron-glow-org: rgba(255, 110, 40, 0.14);
+      --tron-glow-cyan: rgba(0, 212, 255, 0.16);
+      --tron-rail: rgba(200, 210, 230, 0.55);
       --type-primary: #ffffff;
-      --type-secondary: rgba(220, 230, 250, 0.72);
-      --type-tertiary: rgba(180, 200, 230, 0.55);
+      --type-secondary: rgba(220, 230, 250, 0.78);
+      --type-tertiary: rgba(180, 200, 230, 0.58);
       --mins-size: 38px;
       --cta-orange: #f9461c;
-      /* Spring sheet open (Phase C) */
       --ease-sheet: 0.38s cubic-bezier(0.22, 1.15, 0.36, 1);
       --ease-press: 0.16s cubic-bezier(0.22, 1, 0.36, 1);
       --safe-b: max(16px, env(safe-area-inset-bottom));
       --safe-t: max(10px, env(safe-area-inset-top));
       --safe-l: max(12px, env(safe-area-inset-left));
       --safe-r: max(12px, env(safe-area-inset-right));
-      /* legacy aliases */
       --glass-bg: var(--glass-fill);
       --glass-bg-strong: var(--glass-fill-strong);
-      --glass-border: rgba(255, 255, 255, 0.14);
-      --glass-border-org: rgba(255, 140, 60, 0.55);
-      --glass-highlight: linear-gradient(165deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.06) 28%, rgba(255,255,255,0) 55%);
+      --glass-border: rgba(255, 255, 255, 0.12);
+      --glass-border-strong: rgba(180, 200, 220, 0.22);
+      --glass-border-org: var(--glass-border-strong);
+      --glass-highlight: linear-gradient(165deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 28%, rgba(255,255,255,0) 55%);
     }
     @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
       :root {
-        --glass-fill: rgba(10, 14, 26, 0.94);
-        --glass-fill-strong: rgba(8, 12, 22, 0.96);
+        --glass-fill: rgba(0, 0, 0, 0.94);
+        --glass-fill-strong: rgba(0, 0, 0, 0.97);
       }
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { height: 100%; background: #05060a; overflow: hidden; }
+    html, body {
+      height: 100%; background: #05060a; overflow: hidden;
+      font-family: var(--font-ui);
+    }
     #map { position: absolute; inset: 0; width: 100%; height: 100%; }
 
     /* HUD chrome — never intercepts map interaction */
-    .hud { position: absolute; z-index: 10; pointer-events: none; font-family: "SF Mono", "Menlo", monospace; }
+    .hud { position: absolute; z-index: 10; pointer-events: none; font-family: var(--font-mono); }
     #wordmark {
       top: 18px; left: 22px;
       font-size: 22px; font-weight: 700; letter-spacing: 0.35em;
@@ -160,7 +167,7 @@
     #compass-rose path { fill: var(--neon-cyan); }
     #compass-rose text {
       fill: var(--hud-dim); font-size: 7px; text-anchor: middle;
-      font-family: "SF Mono", "Menlo", monospace;
+      font-family: var(--font-mono);
     }
 
     /* U12: instrument sidebar — glass panel, docks left below the wordmark.
@@ -318,9 +325,8 @@
     }
 
     /*
-     * Liquid Glass material (web approx of Apple LG):
-     * layered fill + saturate blur + specular rim + thickness shadows.
-     * Optional SVG displacement for lens warp (prefers-reduced-motion off).
+     * Dark instrument glass: black frost + blur, neutral steel edge.
+     * Neon stays on trains/lines — not on panel chrome.
      */
     .lg {
       position: relative;
@@ -328,19 +334,18 @@
       overflow: hidden;
       border: none;
       background:
-        linear-gradient(155deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 20%, rgba(255, 255, 255, 0) 45%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(0, 0, 0, 0.1) 100%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(0, 0, 0, 0.2) 100%),
         var(--glass-fill);
       -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright));
       backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright));
       box-shadow:
-        0 0 0 0.5px rgba(255, 255, 255, 0.35) inset,
-        0 1px 0 0 rgba(255, 255, 255, 0.22) inset,
-        0 -12px 28px rgba(0, 0, 0, 0.18) inset,
-        0 1px 2px rgba(0, 0, 0, 0.12),
-        0 12px 40px rgba(0, 0, 0, 0.42),
-        0 0 48px rgba(255, 110, 40, 0.07);
+        0 0 0 0.5px rgba(255, 255, 255, 0.14) inset,
+        0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+        0 -10px 24px rgba(0, 0, 0, 0.35) inset,
+        0 1px 2px rgba(0, 0, 0, 0.35),
+        0 16px 48px rgba(0, 0, 0, 0.55);
       color: var(--type-primary);
+      font-family: var(--font-ui);
     }
     .lg::before {
       content: "";
@@ -351,14 +356,13 @@
       z-index: 0;
       background: linear-gradient(
         125deg,
-        rgba(255, 255, 255, 0.28) 0%,
-        rgba(255, 255, 255, 0.06) 16%,
-        transparent 40%
+        rgba(255, 255, 255, 0.1) 0%,
+        rgba(255, 255, 255, 0.02) 18%,
+        transparent 42%
       );
-      opacity: 0.7;
-      mix-blend-mode: soft-light;
+      opacity: 0.85;
     }
-    /* Gradient border ring (wet glass edge + Tron energy) */
+    /* Neutral steel rim (no orange energy frame) */
     .lg::after {
       content: "";
       position: absolute;
@@ -368,14 +372,12 @@
       z-index: 0;
       padding: 1px;
       background: linear-gradient(
-        125deg,
-        rgba(255, 255, 255, 0.55) 0%,
-        rgba(255, 255, 255, 0.12) 22%,
-        rgba(255, 130, 50, 0.55) 48%,
-        rgba(0, 212, 255, 0.35) 72%,
-        rgba(255, 255, 255, 0.2) 100%
+        145deg,
+        rgba(255, 255, 255, 0.28) 0%,
+        rgba(200, 210, 230, 0.14) 35%,
+        rgba(120, 140, 170, 0.18) 70%,
+        rgba(255, 255, 255, 0.1) 100%
       );
-      background-size: 220% 220%;
       -webkit-mask:
         linear-gradient(#000 0 0) content-box,
         linear-gradient(#000 0 0);
@@ -386,35 +388,16 @@
       mask-composite: exclude;
     }
     .lg > * { position: relative; z-index: 1; }
-    .lg-org {
-      box-shadow:
-        0 0 0 0.5px rgba(255, 255, 255, 0.3) inset,
-        0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
-        0 -12px 28px rgba(0, 0, 0, 0.2) inset,
-        0 12px 40px rgba(0, 0, 0, 0.45),
-        0 0 56px var(--tron-glow-org);
-    }
+    .lg-org,
     .lg-cyan {
       box-shadow:
-        0 0 0 0.5px rgba(255, 255, 255, 0.3) inset,
-        0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
-        0 -12px 28px rgba(0, 0, 0, 0.2) inset,
-        0 12px 40px rgba(0, 0, 0, 0.45),
-        0 0 48px var(--tron-glow-cyan);
+        0 0 0 0.5px rgba(255, 255, 255, 0.14) inset,
+        0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+        0 -10px 24px rgba(0, 0, 0, 0.35) inset,
+        0 16px 48px rgba(0, 0, 0, 0.55);
     }
-    /* Living rim (Rim Pulse) — soft edge energy, not full neon flood */
     @media (prefers-reduced-motion: no-preference) {
-      .lg-org {
-        animation: tron-glow-org 3.4s ease-in-out infinite;
-      }
-      .lg-cyan:not(.fab) {
-        animation: tron-glow-cyan 3.8s ease-in-out infinite;
-      }
-      .lg-org::after,
-      .lg-cyan::after {
-        animation: tron-rim-shift 5s linear infinite;
-        background-size: 200% 200%;
-      }
+      /* no orange/cyan rim pulse on panels */
     }
     @keyframes tron-glow-org {
       0%, 100% {
@@ -494,6 +477,46 @@
     .lg-org > .tron-brackets { --tron-bracket: var(--tron-org); }
     .lg-cyan > .tron-brackets { --tron-bracket: var(--tron-cyan); }
 
+    /* Map view: 2D / 3D / LIVE (Maps-style corner, not thumb FAB pile) */
+    .map-view-controls {
+      position: absolute; z-index: 14;
+      right: var(--safe-r);
+      top: max(72px, calc(env(safe-area-inset-top) + 56px));
+      display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none;
+    }
+    .map-view-btn {
+      pointer-events: auto;
+      min-width: 52px;
+      height: 40px;
+      padding: 0 12px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      color: var(--type-secondary);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .map-view-btn[aria-pressed="true"] {
+      color: var(--type-primary);
+      box-shadow:
+        0 0 0 0.5px rgba(255, 255, 255, 0.28) inset,
+        0 0 20px rgba(0, 212, 255, 0.22) !important;
+    }
+    .map-view-live {
+      letter-spacing: 0.16em;
+      color: rgba(100, 255, 160, 0.85);
+    }
+    .map-view-live:active {
+      filter: brightness(1.2);
+    }
+    @media (max-width: 720px) {
+      #sidebar { display: none !important; }
+    }
+
     /* FAB stack — thumb zone (large, readable glyphs) */
     #fab-stack {
       position: absolute; z-index: 15;
@@ -506,7 +529,7 @@
       width: var(--fab-size); height: var(--fab-size); border-radius: 999px;
       pointer-events: auto; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+      font-family: var(--font-ui);
       font-size: 20px; font-weight: 600;
       letter-spacing: 0.02em;
       color: var(--type-primary);
@@ -557,7 +580,7 @@
       display: none; pointer-events: auto;
       padding: 12px 16px;
       border-radius: var(--glass-radius-sm);
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: var(--font-ui);
       font-size: 13px; font-weight: 500;
       letter-spacing: 0.01em;
       color: #ffe0c2;
@@ -598,7 +621,7 @@
         filter 0.2s ease;
       pointer-events: none;
       border-radius: var(--glass-radius);
-      font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+      font-family: var(--font-ui);
       color: var(--type-primary);
       padding: 12px 14px 16px;
     }
@@ -836,7 +859,7 @@
         opacity 0.28s ease;
       pointer-events: none;
       border-radius: var(--glass-radius);
-      font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+      font-family: var(--font-ui);
       color: var(--type-primary);
       display: flex; flex-direction: column;
     }
@@ -1094,7 +1117,12 @@
   <div id="map"></div>
   <div id="scanlines"></div>
   <div id="vignette"></div>
-  <div class="hud" id="wordmark">CHI-TRON<small>ORANGE LIVE</small></div>
+  <div class="hud" id="wordmark">CHI-TRON<small>LIVE</small></div>
+  <div id="map-view-controls" class="map-view-controls" role="group" aria-label="Map view">
+    <button type="button" class="map-view-btn lg" id="btn-view-2d" aria-pressed="true">2D</button>
+    <button type="button" class="map-view-btn lg" id="btn-view-3d" aria-pressed="false">3D</button>
+    <button type="button" class="map-view-btn lg map-view-live" id="btn-live-overview" title="Show live trains and buses">LIVE</button>
+  </div>
   <div class="hud" id="clock">--:--:--</div>
   <div class="hud" id="status">BOOT</div>
   <div class="hud" id="bus-status">BUS BOOT</div>
@@ -1182,9 +1210,9 @@
     </button>
   </div>
   <div class="hud lg lg-cyan" id="loc-chip">LOCATION OFF</div>
-  <button type="button" class="hud lg lg-org" id="nearest-chip" aria-live="polite"></button>
+  <button type="button" class="hud lg lg-cyan" id="nearest-chip" aria-live="polite"></button>
 
-  <div id="station-sheet" class="lg lg-org lg-lens" role="dialog" aria-label="Station arrivals">
+  <div id="station-sheet" class="lg lg-lens" role="dialog" aria-label="Station arrivals" aria-modal="true">
     <span class="tron-brackets" aria-hidden="true"></span>
     <div id="sheet-handle" aria-hidden="true"></div>
     <div id="sheet-header">
@@ -1199,7 +1227,7 @@
     <div id="sheet-rows" aria-live="polite"></div>
   </div>
 
-  <div id="browse-sheet" class="lg lg-cyan lg-lens" role="dialog" aria-label="Browse">
+  <div id="browse-sheet" class="lg lg-lens" role="dialog" aria-label="Browse" aria-modal="true">
     <span class="tron-brackets" aria-hidden="true"></span>
     <div id="browse-header">
       <button type="button" id="browse-back" aria-label="Back" hidden>←</button>

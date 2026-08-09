@@ -3,19 +3,41 @@
 
 const SIDEBAR_BIASED_CENTER = [-87.6198, 41.8781]; // ~0.008deg east of Loop for sidebar
 
-export const LOOP_PRESET = {
+/** Tracker cold-open: flat aerial Loop (Google Maps 2D default). */
+export const AERIAL_2D = {
+  center: SIDEBAR_BIASED_CENTER,
+  zoom: 12.6,
+  pitch: 0,
+  bearing: 0,
+};
+
+/** System-wide live overview (momentary LIVE action). */
+export const CITY_2D = {
+  center: SIDEBAR_BIASED_CENTER,
+  zoom: 11.0,
+  pitch: 0,
+  bearing: 0,
+};
+
+/** Cinematic Loop 3D (2D/3D toggle + desktop LOOP camera). */
+export const LOOP_3D = {
   center: SIDEBAR_BIASED_CENTER,
   zoom: 15.4,
-  pitch: 60,
+  pitch: 58,
   bearing: -12,
 };
+
+/** @deprecated alias — prefer LOOP_3D or AERIAL_2D */
+export const LOOP_PRESET = LOOP_3D;
 
 export const CITY_PRESET = {
   center: SIDEBAR_BIASED_CENTER,
   zoom: 11.2,
-  pitch: 35,
+  pitch: 0,
   bearing: 0,
 };
+
+export const PITCH_3D = 58;
 
 export const HEIGHT_EXAGGERATION = 1.9;
 export const CROWN_LIGHT_DELTA = 14;

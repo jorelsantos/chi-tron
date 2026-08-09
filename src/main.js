@@ -5,11 +5,21 @@ import {
   DARK_CITY_STYLE,
   FALLBACK_STYLE,
   LOOP_PRESET,
+  AERIAL_2D,
+  CITY_2D,
+  LOOP_3D,
+  PITCH_3D,
   CHICAGOLAND_BOUNDS,
   CHICAGOLAND_MIN_ZOOM,
   HEIGHT_EXAGGERATION,
   CROWN_LIGHT_DELTA,
 } from './style.js';
+import {
+  activeSurface,
+  listFabAction,
+  searchFabAction,
+  dismissTopAction,
+} from './ui-nav.js';
 import { now, TrainEngine } from './trains.js';
 import { BusEngine } from './buses.js';
 import { AlertsEngine } from './alerts.js';
@@ -145,14 +155,14 @@ async function boot() {
   const busFeedReady = busBoardRoutes.length > 0;
   const busMapReady = Object.keys(busPatterns.routes || {}).length > 0;
 
-  // Single full-bleed map — cold steel + cyan haze baseline, tip-only pulses.
+  // Tracker cold-open: flat aerial Loop (2D). 3D via map view control.
   const map = new maplibregl.Map({
     container: 'map',
     style: DARK_CITY_STYLE,
-    center: LOOP_PRESET.center,
-    zoom: LOOP_PRESET.zoom,
-    pitch: LOOP_PRESET.pitch,
-    bearing: LOOP_PRESET.bearing,
+    center: AERIAL_2D.center,
+    zoom: AERIAL_2D.zoom,
+    pitch: AERIAL_2D.pitch,
+    bearing: AERIAL_2D.bearing,
     maxPitch: 70,
     minZoom: CHICAGOLAND_MIN_ZOOM,
     maxBounds: CHICAGOLAND_BOUNDS,
@@ -164,6 +174,14 @@ async function boot() {
   map.setMinZoom(CHICAGOLAND_MIN_ZOOM);
   new ResizeObserver(() => map.resize()).observe(document.getElementById('map'));
   requestAnimationFrame(() => requestAnimationFrame(() => map.resize()));
+
+  /** @type {boolean} 2D (pitch 0) vs 3D instrument pitch */
+  let mapIs3d = false;
+  function syncViewButtons() {
+    document.getElementById('btn-view-2d')?.setAttribute('aria-pressed', String(!mapIs3d));
+    document.getElementById('btn-view-3d')?.setAttribute('aria-pressed', String(mapIs3d));
+  }
+  // Wired after followMe exists (see below).
 
   map.on('error', (e) => {
     if (!map.__fellBack && /source|style|tile/i.test(String(e.error?.message))) {
@@ -267,7 +285,7 @@ async function boot() {
   map.on('load', () => {
     addTrackUnderglow();
     map.resize();
-    map.jumpTo(LOOP_PRESET);
+    map.jumpTo(AERIAL_2D);
     map.setMaxBounds(CHICAGOLAND_BOUNDS);
     map.setMinZoom(CHICAGOLAND_MIN_ZOOM);
     loadChicagoBuildings?.();
@@ -313,6 +331,42 @@ async function boot() {
 
   let followed = null; // vehicle follow (train)
   let followMe = false;
+
+  function setMap2d() {
+    mapIs3d = false;
+    followMe = false;
+    map.easeTo({ pitch: 0, bearing: 0, duration: 700, essential: true });
+    syncViewButtons();
+  }
+  function setMap3d() {
+    mapIs3d = true;
+    followMe = false;
+    map.easeTo({
+      pitch: PITCH_3D,
+      bearing: LOOP_3D.bearing,
+      zoom: Math.max(map.getZoom(), 14.2),
+      duration: 900,
+      essential: true,
+    });
+    syncViewButtons();
+  }
+  function liveOverview() {
+    followMe = false;
+    mapIs3d = false;
+    syncViewButtons();
+    map.easeTo({
+      center: CITY_2D.center,
+      zoom: CITY_2D.zoom,
+      pitch: 0,
+      bearing: 0,
+      duration: 1100,
+      essential: true,
+    });
+  }
+  document.getElementById('btn-view-2d')?.addEventListener('click', setMap2d);
+  document.getElementById('btn-view-3d')?.addEventListener('click', setMap3d);
+  document.getElementById('btn-live-overview')?.addEventListener('click', liveOverview);
+  syncViewButtons();
   let userFix = null;
   let geoWatch = null;
   let selectedStationId = null;
@@ -666,7 +720,19 @@ async function boot() {
     browseBusQuery = '';
   }
 
+  function isBrowseOpen() {
+    return Boolean(browseEl?.classList.contains('open'));
+  }
+  function isBoardOpen() {
+    return Boolean(sheetEl?.classList.contains('open'));
+  }
+  function currentSurface() {
+    return activeSurface(isBrowseOpen(), isBoardOpen());
+  }
+
   function openBrowse(mode = 'lines') {
+    // Exclusive surface: never stack board + browse.
+    if (isBoardOpen()) closeStation({ restoreBrowse: false });
     browseMode = mode;
     browseEl?.classList.add('open');
     const showBusSearch = browseKind === 'bus' && mode === 'lines';
@@ -693,6 +759,12 @@ async function boot() {
       renderBrowseSearch('');
     }
     if (mode === 'search' || showBusSearch) browseSearchInput?.focus();
+  }
+
+  function dismissTopSurface() {
+    const act = dismissTopAction(currentSurface());
+    if (act === 'close-board') closeStation({ restoreBrowse: false });
+    else if (act === 'close-browse') closeBrowse();
   }
 
   function renderBrowseLines() {
@@ -980,11 +1052,20 @@ async function boot() {
     openBrowse('lines');
   });
   document.getElementById('fab-lines')?.addEventListener('click', () => {
-    if (browseEl?.classList.contains('open') && browseMode !== 'search') closeBrowse();
-    else openBrowse('lines');
+    const act = listFabAction(currentSurface());
+    if (act === 'close-browse') closeBrowse();
+    else if (act === 'board-to-browse') {
+      closeStation({ restoreBrowse: false });
+      browseKind = 'train';
+      openBrowse('lines');
+    } else {
+      browseKind = browseKind === 'bus' ? 'bus' : 'train';
+      openBrowse('lines');
+    }
   });
   document.getElementById('fab-search')?.addEventListener('click', () => {
-    if (browseEl?.classList.contains('open') && browseMode === 'search') closeBrowse();
+    const act = searchFabAction(currentSurface(), browseMode === 'search' && isBrowseOpen());
+    if (act === 'close-browse') closeBrowse();
     else openBrowse('search');
   });
   browseSearchInput?.addEventListener('input', () => {
@@ -1042,6 +1123,7 @@ async function boot() {
 
   document.getElementById('fab-locate')?.addEventListener('click', () => {
     closeBrowse();
+    closeStation({ restoreBrowse: false });
     enableLocation();
     if (userFix) {
       followMe = true;
@@ -1086,7 +1168,8 @@ async function boot() {
 
   function handleMapClick(info) {
     if (!info.picked || !info.object) {
-      // empty map tap: do not force-close sheet (user may be reading board)
+      // Empty map: dismiss top sheet only (one surface at a time).
+      dismissTopSurface();
       return;
     }
     if (info.layer?.id === 'station-ring') {
@@ -1105,8 +1188,8 @@ async function boot() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (browseEl?.classList.contains('open')) closeBrowse();
-      else if (selectedStationId) closeStation();
+      const surface = currentSurface();
+      if (surface === 'browse' || surface === 'board') dismissTopSurface();
       else releaseFollow();
     }
   });
