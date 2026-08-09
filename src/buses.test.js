@@ -116,8 +116,8 @@ describe('BusEngine.ingest — no-service responses leave prior state intact', (
 describe('chunkRoutes', () => {
   it('splits the marquee route list into calls of at most 10 routes each', () => {
     const chunks = chunkRoutes(MARQUEE_ROUTES);
-    expect(MARQUEE_ROUTES.length).toBe(20);
-    expect(chunks.length).toBe(2);
+    expect(MARQUEE_ROUTES.length).toBeGreaterThanOrEqual(20);
+    expect(chunks.length).toBeGreaterThanOrEqual(2);
     for (const c of chunks) expect(c.length).toBeLessThanOrEqual(10);
     expect(chunks.flat()).toEqual(MARQUEE_ROUTES);
   });

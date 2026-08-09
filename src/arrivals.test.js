@@ -8,6 +8,8 @@ import {
   minutesUntil,
   formatClock,
   groupArrivalsByDirection,
+  groupArrivalsByLineThenDirection,
+  lineKeyFromRt,
 } from './arrivals.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -66,5 +68,35 @@ describe('arrivals normalize', () => {
     for (const g of groups) {
       expect(g.rows.length).toBeGreaterThan(0);
     }
+  });
+
+  it('groupArrivalsByLineThenDirection splits transfer multi-rt', () => {
+    const data = {
+      ctatt: {
+        eta: [
+          { rt: 'Red', destNm: 'Howard', arrT: '2026-08-08T12:10:00', isApp: '0', isDly: '0', isSch: '0', rn: '1' },
+          { rt: 'Red', destNm: '95th/Dan Ryan', arrT: '2026-08-08T12:15:00', isApp: '0', isDly: '0', isSch: '0', rn: '2' },
+          { rt: 'Org', destNm: 'Midway', arrT: '2026-08-08T12:12:00', isApp: '0', isDly: '0', isSch: '0', rn: '3' },
+        ],
+      },
+    };
+    const rows = normalizeArrivals(data, { nowMs: Date.parse('2026-08-08T17:00:00Z') });
+    const blocks = groupArrivalsByLineThenDirection(rows);
+    expect(blocks.map((b) => b.lineKey)).toEqual(['Red', 'Org']);
+    expect(blocks[0].directions.length).toBeGreaterThanOrEqual(1);
+    expect(lineKeyFromRt('red')).toBe('Red');
+  });
+
+  it('normalize without rtFilter keeps all lines', () => {
+    const data = {
+      ctatt: {
+        eta: [
+          { rt: 'Red', destNm: 'Howard', arrT: '2026-08-08T12:10:00', isApp: '0', isDly: '0', isSch: '0', rn: '1' },
+          { rt: 'Org', destNm: 'Midway', arrT: '2026-08-08T12:12:00', isApp: '0', isDly: '0', isSch: '0', rn: '3' },
+        ],
+      },
+    };
+    const rows = normalizeArrivals(data, { nowMs: 0 });
+    expect(rows).toHaveLength(2);
   });
 });

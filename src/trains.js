@@ -4,6 +4,7 @@
 
 import { prepareLine, snapToLine, pointAtDist } from './tracks.js';
 import { Poller, DEFAULT_DAILY_CEILING } from './poller.js';
+import { liveRouteCodes } from './catalog.js';
 
 const POLL_MS = 5000;
 // U14: this feed's ledger namespace (keyed off CTA_KEY, the real Train
@@ -12,8 +13,8 @@ const POLL_MS = 5000;
 const TRAIN_LEDGER_KEY = 'cta-train';
 const STALE_POLLS = 2; // absent this many polls → stale → removed
 const TRAIL_SECONDS = 45; // live train trail length (seconds of history)
-// Live Nav MVP: Orange Line only (budget + product focus). Phase 2 re-expands.
-export const LIVE_ROUTES = ['org'];
+// Derived from catalog LINE_DEFS.live — one multi-rt positions call.
+export const LIVE_ROUTES = liveRouteCodes();
 const ROUTES = LIVE_ROUTES;
 // API route codes → tracks.json line keys
 const ROUTE_TO_LINE = {

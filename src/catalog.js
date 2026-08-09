@@ -1,29 +1,102 @@
-// Pure catalog helpers: ordered Orange stations + search (no DOM).
+// Line config factory + station catalog helpers (no DOM).
 
 /**
- * Orange stations ordered Midway → Loop by distance along Org rail.
- * Prefers railDist from snapStationsToRails; falls back to name order.
+ * Single source of truth for L lines.
+ * `live` gates map positions, browse list, and search union.
+ * Flip `live` per line to gate map, browse, and search.
+ */
+export const LINE_DEFS = [
+  { key: 'Red', rt: 'red', name: 'Red Line', live: true, color: [255, 45, 72] },
+  { key: 'Blue', rt: 'blue', name: 'Blue Line', live: true, color: [0, 196, 255] },
+  { key: 'Brn', rt: 'brn', name: 'Brown Line', live: true, color: [210, 118, 48] },
+  { key: 'G', rt: 'g', name: 'Green Line', live: true, color: [20, 230, 95] },
+  { key: 'Org', rt: 'org', name: 'Orange Line', live: true, color: [255, 105, 28] },
+  { key: 'P', rt: 'p', name: 'Purple Line', live: true, color: [155, 78, 255] },
+  { key: 'Pink', rt: 'pink', name: 'Pink Line', live: true, color: [255, 90, 185] },
+  { key: 'Y', rt: 'y', name: 'Yellow Line', live: true, color: [255, 200, 70] },
+];
+
+/** Browse UI list — only live lines shown (hide non-live until flipped). */
+export function browseLinesLive() {
+  return LINE_DEFS.filter((l) => l.live);
+}
+
+/** @deprecated use browseLinesLive — kept name for call sites */
+export const BROWSE_LINES = LINE_DEFS;
+
+export function liveLineKeys() {
+  return LINE_DEFS.filter((l) => l.live).map((l) => l.key);
+}
+
+/** CTA ttpositions `rt` codes for live lines (comma-joined by TrainEngine). */
+export function liveRouteCodes() {
+  return LINE_DEFS.filter((l) => l.live).map((l) => l.rt);
+}
+
+export function lineDefByKey(key) {
+  return LINE_DEFS.find((l) => l.key === key) || null;
+}
+
+export function lineDefByRt(rt) {
+  const code = String(rt || '').toLowerCase();
+  return LINE_DEFS.find((l) => l.rt === code) || null;
+}
+
+export function lineColor(key) {
+  return lineDefByKey(key)?.color || [180, 180, 200];
+}
+
+/**
+ * Stations on a line ordered along the rail (railDist from snap).
+ * Falls back to name order when railDist missing.
  *
  * @param {Record<string, object>|object[]} stations
+ * @param {string} lineKey e.g. 'Org' | 'Red'
  * @returns {object[]}
  */
-export function orgStationsOrdered(stations) {
+export function stationsOrdered(stations, lineKey) {
   const list = Array.isArray(stations) ? stations : Object.values(stations || {});
-  const org = list
-    .filter((s) => s?.lines?.includes('Org'))
+  const key = String(lineKey || '');
+  const onLine = list
+    .filter((s) => s?.lines?.includes(key))
     .map((s) => ({
       ...s,
       id: s.id,
       name: s.name || s.id,
     }));
 
-  org.sort((a, b) => {
+  onLine.sort((a, b) => {
     const da = Number.isFinite(a.railDist) ? a.railDist : Infinity;
     const db = Number.isFinite(b.railDist) ? b.railDist : Infinity;
     if (da !== db) return da - db;
     return String(a.name).localeCompare(String(b.name));
   });
-  return org;
+  return onLine;
+}
+
+/** @deprecated prefer stationsOrdered(stations, 'Org') */
+export function orgStationsOrdered(stations) {
+  return stationsOrdered(stations, 'Org');
+}
+
+/**
+ * Union of stations on any live line (for search / nearest).
+ * @param {Record<string, object>|object[]} stations
+ */
+export function liveStationsUnion(stations) {
+  const list = Array.isArray(stations) ? stations : Object.values(stations || {});
+  const live = new Set(liveLineKeys());
+  const seen = new Set();
+  const out = [];
+  for (const s of list) {
+    if (!s?.id || seen.has(s.id)) continue;
+    const lines = s.lines || [];
+    if (!lines.some((k) => live.has(k))) continue;
+    seen.add(s.id);
+    out.push(s);
+  }
+  out.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  return out;
 }
 
 /**
@@ -52,14 +125,9 @@ export function searchStations(stationList, query, limit = 12) {
   return scored.slice(0, limit).map((x) => x.s);
 }
 
-/** Train lines for browse UI (MVP: only Org is live). */
-export const BROWSE_LINES = [
-  { key: 'Org', name: 'Orange Line', live: true, color: [255, 105, 28] },
-  { key: 'Red', name: 'Red Line', live: false, color: [255, 45, 72] },
-  { key: 'Blue', name: 'Blue Line', live: false, color: [0, 196, 255] },
-  { key: 'Brn', name: 'Brown Line', live: false, color: [210, 118, 48] },
-  { key: 'G', name: 'Green Line', live: false, color: [20, 230, 95] },
-  { key: 'P', name: 'Purple Line', live: false, color: [155, 78, 255] },
-  { key: 'Pink', name: 'Pink Line', live: false, color: [255, 90, 185] },
-  { key: 'Y', name: 'Yellow Line', live: false, color: [255, 200, 70] },
-];
+/** Clean station title for board header. */
+export function cleanStationName(name) {
+  return String(name || '')
+    .replace(/\s*\((Orange|Red|Blue|Brown|Green|Purple|Pink|Yellow)\)\s*/gi, '')
+    .trim();
+}

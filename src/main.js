@@ -11,15 +11,40 @@ import {
   CROWN_LIGHT_DELTA,
 } from './style.js';
 import { now, TrainEngine } from './trains.js';
+import { BusEngine } from './buses.js';
 import { AlertsEngine } from './alerts.js';
 import { buildLayers, LINE_COLORS, rgbString, lineStressTreatment } from './layers.js';
 import { createHud } from './hud.js';
-import { ArrivalsSession, groupArrivalsByDirection } from './arrivals.js';
+import {
+  ArrivalsSession,
+  groupArrivalsByDirection,
+  shortDestName,
+} from './arrivals.js';
+import {
+  BusArrivalsSession,
+  groupBusByDirection,
+} from './bus-arrivals.js';
 import { startWatch, nearestStation, walkMinutes } from './geolocation.js';
 import { snapStationsToRails } from './stations-rail.js';
-import { orgStationsOrdered, searchStations, BROWSE_LINES } from './catalog.js';
+import {
+  stationsOrdered,
+  searchStations,
+  browseLinesLive,
+  liveLineKeys,
+  liveStationsUnion,
+  lineDefByKey,
+  lineColor,
+  cleanStationName,
+} from './catalog.js';
+import {
+  liveBusRoutes,
+  filterPatternsToRoutes,
+  directionsForRoute,
+  stopsForRoute,
+  busRouteDef,
+} from './bus-catalog.js';
 
-// Live Nav MVP: Orange Line trains + station arrivals + user location.
+// Live L nav: all lines with live:true in catalog LINE_DEFS.
 // Map-first (Maps / Pokémon Go philosophy).
 const statusEl = document.getElementById('status');
 const busStatusEl = document.getElementById('bus-status');
@@ -45,19 +70,22 @@ const TRAIN_STATUS_LABELS = {
   mock: 'SIM MODE',
   lost: 'SIGNAL LOST',
   hold: 'BUDGET HOLD',
-  live: 'LIVE · ORANGE',
+  live: 'LIVE · L',
 };
 function setStatus(state) {
   feedStatus = state;
   renderFeedStatus(statusEl, state, TRAIN_STATUS_LABELS);
 }
 
-function setBusStatus() {
-  // Buses deferred past Orange MVP — keep pill quiet.
-  if (busStatusEl) {
-    busStatusEl.className = 'hud disabled';
-    busStatusEl.textContent = 'BUS SOON';
-  }
+const BUS_STATUS_LABELS = {
+  mock: 'BUS SIM',
+  lost: 'BUS LOST',
+  hold: 'BUS HOLD',
+  live: 'BUS LIVE',
+  disabled: 'BUS OFF',
+};
+function setBusStatus(state = 'disabled') {
+  renderFeedStatus(busStatusEl, state, BUS_STATUS_LABELS);
 }
 
 setInterval(() => {
@@ -86,13 +114,24 @@ async function boot() {
       console.warn('[chi-tron] stations.json failed to load, station markers disabled:', err.message);
       return {};
     });
+  const patternsPromise = fetch('/data/patterns.json')
+    .then((r) => (r.ok ? r.json() : {}))
+    .catch((err) => {
+      console.warn('[chi-tron] patterns.json failed — bus layer off:', err.message);
+      return {};
+    });
 
-  setBusStatus();
+  setBusStatus('disabled');
 
   const tracks = await tracksPromise;
   stationsRaw = await stationsPromise;
+  const patternsRaw = await patternsPromise;
   // Snap markers onto rail geometry so the 3D world reads as one system.
   stations = snapStationsToRails(tracks, stationsRaw);
+  const busPatterns = filterPatternsToRoutes(patternsRaw);
+  const busEngine = new BusEngine(busPatterns);
+  const busArrivals = new BusArrivalsSession();
+  const busFeedReady = Object.keys(busPatterns.routes || {}).length > 0;
 
   // Single full-bleed map — cold steel + cyan haze baseline, tip-only pulses.
   const map = new maplibregl.Map({
@@ -225,29 +264,37 @@ async function boot() {
   const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
   map.addControl(overlay);
 
-  // Live Orange trains only — map is the product.
+  // Live L trains + MVP buses (8 + 62 only).
   const engine = new TrainEngine(tracks);
   const trackKeys = Object.keys(tracks);
-  const visibleLines = new Set(['Org']);
+  const visibleLines = new Set(liveLineKeys());
   const lastStressOpacity = new Map();
   const display = {
     trains: true,
-    buses: false,
+    buses: busFeedReady,
     cars: false,
     buildings: true,
     stations: true,
   };
 
-  // Filter underglow to Org only once source exists
-  function filterTracksToOrg() {
+  if (busFeedReady) {
+    busEngine.onStatus = (state) => setBusStatus(state);
+    busEngine.startLive();
+  } else {
+    setBusStatus('disabled');
+  }
+
+  // Filter underglow to live lines only
+  function filterTracksToLive() {
+    const live = liveLineKeys();
     for (const id of TRACK_GLOW_LAYER_IDS) {
       if (map.getLayer(id)) {
-        map.setFilter(id, ['==', ['get', 'line'], 'Org']);
+        map.setFilter(id, ['in', ['get', 'line'], ['literal', live]]);
       }
     }
   }
-  map.on('load', filterTracksToOrg);
-  if (map.loaded()) filterTracksToOrg();
+  map.on('load', filterTracksToLive);
+  if (map.loaded()) filterTracksToLive();
 
   let followed = null; // vehicle follow (train)
   let followMe = false;
@@ -257,10 +304,12 @@ async function boot() {
   const arrivals = new ArrivalsSession();
 
   // Walk distance uses GTFS (entrance) coords; map markers use rail-snapped coords.
-  const orgStationsForWalk = () =>
-    Object.values(stations)
-      .filter((s) => s.lines?.includes('Org'))
-      .map((s) => ({ ...s, id: s.id, coords: s.gtfsCoords || s.coords }));
+  const liveStationsForWalk = () =>
+    liveStationsUnion(stations).map((s) => ({
+      ...s,
+      id: s.id,
+      coords: s.gtfsCoords || s.coords,
+    }));
 
   function releaseFollow() {
     if (!followed) return;
@@ -282,8 +331,35 @@ async function boot() {
   const sheetUpdated = document.getElementById('sheet-updated');
   const nearestChip = document.getElementById('nearest-chip');
   const locChip = document.getElementById('loc-chip');
+  /** @type {{ source: 'map'|'stations'|'search', lineKey?: string, query?: string }|null} */
+  let boardNav = null;
 
-  function renderSheetRows(rows, error) {
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Board is always one line: the line you entered from (browse), or a
+   * resolved single line for map/search. No multi-line transfer dump.
+   * @param {object} station
+   * @param {string} [preferredKey]
+   */
+  function resolveBoardLineKey(station, preferredKey) {
+    const live = liveLineKeys();
+    const onStation = (station?.lines || []).filter((k) => live.includes(k));
+    if (preferredKey && onStation.includes(preferredKey)) return preferredKey;
+    if (preferredKey && live.includes(preferredKey) && !(station?.lines?.length)) return preferredKey;
+    if (browseLineKey && onStation.includes(browseLineKey)) return browseLineKey;
+    if (onStation.length === 1) return onStation[0];
+    if (onStation.includes('Org')) return 'Org';
+    return onStation[0] || live[0] || 'Org';
+  }
+
+  function renderSheetRows(rows, error, loaded = false, boardLineKey = 'Org') {
     if (!sheetRows) return;
     sheetRows.replaceChildren();
     if (error && !rows?.length) {
@@ -296,18 +372,26 @@ async function boot() {
     if (!rows?.length) {
       const empty = document.createElement('div');
       empty.className = 'sheet-empty';
-      empty.textContent = 'LOADING…';
+      empty.textContent = loaded ? 'NO PREDICTIONS' : 'LOADING…';
       sheetRows.appendChild(empty);
       return;
     }
+    const orbColor = lineColor(boardLineKey);
     const groups = groupArrivalsByDirection(rows);
     for (const g of groups) {
-      if (groups.length > 1 || (g.title && g.title !== 'Arrivals')) {
-        const h = document.createElement('div');
-        h.className = 'dir-header';
-        h.textContent = g.title;
-        sheetRows.appendChild(h);
-      }
+      const section = document.createElement('section');
+      section.className = 'dir-section';
+      section.setAttribute('aria-label', g.title);
+
+      const h = document.createElement('div');
+      h.className = `dir-header dir-${g.kind || 'other'}`;
+      const count = g.rows.length;
+      h.innerHTML = `
+        <span class="dir-title">${escapeHtml(g.title)}</span>
+        <span class="dir-count">${count} ${count === 1 ? 'train' : 'trains'}</span>
+      `;
+      section.appendChild(h);
+
       for (const r of g.rows) {
         const row = document.createElement('div');
         row.className = 'arrival-row';
@@ -315,38 +399,56 @@ async function boot() {
         if (r.isApp) row.classList.add('approaching');
         const minsLabel = r.minutes === 'DUE' || r.isApp ? 'DUE' : String(r.minutes);
         const minsClass = minsLabel === 'DUE' ? 'arr-mins due' : 'arr-mins';
-        const liveTag = r.isSch ? 'SCHEDULED' : 'LIVE';
-        const appTag = r.isApp ? ' · approaching' : '';
-        const unit = minsLabel === 'DUE' ? '' : ' min';
+        const dest = shortDestName(r);
+        const clock = r.clock || '';
         row.innerHTML = `
-          <span class="arr-dest">→ ${r.destNm || '—'}</span>
-          <span class="${minsClass}">${minsLabel}</span>
-          <span class="arr-meta">${r.clock || ''}${unit ? '' : ''}${r.rn ? ` · #${r.rn}` : ''} · ${liveTag}${appTag}${r.isDly ? ' · delayed' : ''}${unit ? ` · ${r.minutes} min` : ''}</span>
+          <span class="arr-orb" style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,0.4) 0%, transparent 42%), rgb(${orbColor.join(',')})" aria-hidden="true"></span>
+          <span class="arr-dest">${escapeHtml(dest)}</span>
+          <span class="arr-clock">${escapeHtml(clock)}</span>
+          <span class="${minsClass}">${escapeHtml(minsLabel)}</span>
         `;
-        sheetRows.appendChild(row);
+        section.appendChild(row);
       }
+      sheetRows.appendChild(section);
     }
   }
 
-  function openStation(station, { fly = true } = {}) {
+  function syncSheetBackUi() {
+    const showBack = boardNav && boardNav.source !== 'map';
+    sheetEl?.classList.toggle('has-back', Boolean(showBack));
+  }
+
+  /**
+   * @param {object} station
+   * @param {{ fly?: boolean, source?: 'map'|'stations'|'search', lineKey?: string, query?: string }} [opts]
+   */
+  function openStation(station, { fly = true, source = 'map', lineKey, query } = {}) {
     if (!station?.id) return;
+    const boardLineKey = resolveBoardLineKey(station, lineKey);
+    const def = lineDefByKey(boardLineKey);
+    const rt = def?.rt || null;
+    boardNav = { source, kind: 'train', lineKey: boardLineKey, query: query || '' };
     closeBrowse();
+    busArrivals.close();
     selectedStationId = station.id;
     sheetEl?.classList.add('open');
-    if (sheetTitle) sheetTitle.textContent = (station.name || station.id).replace(/\s*\(Orange\)\s*/i, '');
+    syncSheetBackUi();
+    if (sheetTitle) sheetTitle.textContent = cleanStationName(station.name || station.id);
     if (sheetMeta) {
-      const tag = alertsEngine.lineStatus?.Org ?? 'normal';
-      sheetMeta.textContent = `ORANGE · ${String(tag).toUpperCase()}`;
+      const st = alertsEngine.lineStatus?.[boardLineKey] ?? 'normal';
+      const label = (def?.name || boardLineKey).replace(/ Line$/i, '').toUpperCase();
+      sheetMeta.textContent = `${label} · ${String(st).toUpperCase()}`;
     }
-    renderSheetRows([], null);
+    renderSheetRows([], null, false, boardLineKey);
     if (sheetUpdated) sheetUpdated.textContent = 'AS OF —';
-    arrivals.onUpdate = ({ rows, updatedAt, error }) => {
-      renderSheetRows(rows, error);
+    arrivals.onUpdate = ({ rows, updatedAt, error, loaded }) => {
+      renderSheetRows(rows, error, Boolean(loaded), boardLineKey);
       if (sheetUpdated && updatedAt) {
         sheetUpdated.textContent = `AS OF ${new Date(updatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
       }
     };
-    arrivals.open(station.id, 'org');
+    // Single-line board: only the line you entered from (browse Red/Orange/etc.)
+    arrivals.open(station.id, rt);
     if (fly && station.coords) {
       map.easeTo({
         center: station.coords,
@@ -357,26 +459,185 @@ async function boot() {
     }
   }
 
-  function closeStation() {
+  function closeStation({ restoreBrowse = false } = {}) {
+    const nav = boardNav;
     selectedStationId = null;
     arrivals.close();
+    busArrivals.close();
     sheetEl?.classList.remove('open');
+    sheetEl?.classList.remove('has-back');
+    boardNav = null;
+    if (restoreBrowse && nav && nav.source !== 'map') {
+      if (nav.kind === 'bus') {
+        browseKind = 'bus';
+        browseBusRt = nav.busRt || browseBusRt;
+        browseBusRtdir = nav.busRtdir || browseBusRtdir;
+        openBrowse('stations');
+      } else if (nav.source === 'search') {
+        browseKind = 'train';
+        openBrowse('search');
+        if (browseSearchInput && nav.query) {
+          browseSearchInput.value = nav.query;
+          renderBrowseSearch(nav.query);
+        }
+      } else {
+        browseKind = 'train';
+        browseLineKey = nav.lineKey || 'Org';
+        openBrowse('stations');
+      }
+    }
   }
 
-  document.getElementById('sheet-close')?.addEventListener('click', closeStation);
+  /** Bus stop board — single route only (same rule as trains). */
+  function openBusStop(stop, { rt, rtdir, source = 'stations' } = {}) {
+    if (!stop?.stpid) return;
+    const routeRt = String(rt || browseBusRt);
+    const dir = rtdir || browseBusRtdir || '';
+    const def = busRouteDef(routeRt);
+    boardNav = {
+      source,
+      kind: 'bus',
+      busRt: routeRt,
+      busRtdir: dir,
+      lineKey: null,
+      query: '',
+    };
+    closeBrowse();
+    selectedStationId = null;
+    arrivals.close();
+    sheetEl?.classList.add('open');
+    syncSheetBackUi();
+    if (sheetTitle) sheetTitle.textContent = stop.name || `Stop ${stop.stpid}`;
+    const dirBit = dir ? ` · ${dir.toUpperCase()}` : '';
+    if (sheetMeta) {
+      sheetMeta.textContent = `${routeRt} · ${(def?.name || 'BUS').toUpperCase()}${dirBit}`;
+    }
+    renderBusSheetRows([], null, false);
+    if (sheetUpdated) sheetUpdated.textContent = 'AS OF —';
+    busArrivals.onUpdate = ({ rows, updatedAt, error, loaded }) => {
+      renderBusSheetRows(rows, error, Boolean(loaded));
+      if (sheetUpdated && updatedAt) {
+        sheetUpdated.textContent = `AS OF ${new Date(updatedAt).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+        })}`;
+      }
+    };
+    busArrivals.open(stop.stpid, routeRt);
+    if (Number.isFinite(stop.lat) && Number.isFinite(stop.lon)) {
+      map.easeTo({
+        center: [stop.lon, stop.lat],
+        zoom: Math.max(map.getZoom(), 14.8),
+        duration: 700,
+        essential: true,
+      });
+    }
+  }
 
-  // ---- Browse: Lines → stations / Search --------------------------------
+  function renderBusSheetRows(rows, error, loaded = false) {
+    if (!sheetRows) return;
+    sheetRows.replaceChildren();
+    if (error && !rows?.length) {
+      const empty = document.createElement('div');
+      empty.className = 'sheet-empty';
+      empty.textContent =
+        error === 'BUDGET HOLD'
+          ? 'BUDGET HOLD'
+          : /key|HTTP|failed|network/i.test(String(error))
+            ? 'FEED ERROR'
+            : 'NO PREDICTIONS';
+      sheetRows.appendChild(empty);
+      return;
+    }
+    if (!rows?.length) {
+      const empty = document.createElement('div');
+      empty.className = 'sheet-empty';
+      empty.textContent = loaded ? 'NO PREDICTIONS' : 'LOADING…';
+      sheetRows.appendChild(empty);
+      return;
+    }
+    const groups = groupBusByDirection(rows);
+    for (const g of groups) {
+      const section = document.createElement('section');
+      section.className = 'dir-section';
+      const h = document.createElement('div');
+      h.className = 'dir-header';
+      h.innerHTML = `
+        <span class="dir-title">${escapeHtml(g.title)}</span>
+        <span class="dir-count">${g.rows.length}</span>
+      `;
+      section.appendChild(h);
+      for (const r of g.rows) {
+        const row = document.createElement('div');
+        row.className = 'arrival-row';
+        if (r.delayed) row.classList.add('delayed');
+        const minsLabel = r.minutes === 'DUE' ? 'DUE' : String(r.minutes);
+        const minsClass = minsLabel === 'DUE' ? 'arr-mins due' : 'arr-mins';
+        const dest = r.des || r.rtdir || '—';
+        row.innerHTML = `
+          <span class="arr-orb arr-orb-bus" aria-hidden="true"></span>
+          <span class="arr-dest">${escapeHtml(dest)}</span>
+          <span class="arr-clock">${escapeHtml(r.clock || '')}</span>
+          <span class="${minsClass}">${escapeHtml(minsLabel)}</span>
+        `;
+        section.appendChild(row);
+      }
+      sheetRows.appendChild(section);
+    }
+  }
+
+  document.getElementById('sheet-close')?.addEventListener('click', () => closeStation());
+  document.getElementById('sheet-back')?.addEventListener('click', () => {
+    closeStation({ restoreBrowse: true });
+  });
+
+  // ---- Browse: Train | Bus → routes/lines → stops/stations / Search ----
   const browseEl = document.getElementById('browse-sheet');
   const browseList = document.getElementById('browse-list');
   const browseTitle = document.getElementById('browse-title');
   const browseBack = document.getElementById('browse-back');
   const browseSearchInput = document.getElementById('browse-search-input');
-  /** @type {'lines'|'stations'|'search'} */
+  /** @type {'train'|'bus'} */
+  let browseKind = 'train';
+  /** @type {'lines'|'directions'|'stations'|'search'} */
   let browseMode = 'lines';
-  let browseLineKey = 'Org';
+  let browseLineKey = liveLineKeys()[0] || 'Org';
+  let browseBusRt = liveBusRoutes()[0]?.rt || '8';
+  /** @type {string} CTA rtdir e.g. Northbound */
+  let browseBusRtdir = '';
 
-  function orderedOrg() {
-    return orgStationsOrdered(stations);
+  function orderedForLine(lineKey) {
+    return stationsOrdered(stations, lineKey);
+  }
+
+  function appendLineOrbs(parent, lineKeys) {
+    const wrap = document.createElement('span');
+    wrap.className = 'line-orbs';
+    const keys = lineKeys || [];
+    const max = 5;
+    const show = keys.slice(0, max);
+    for (const k of show) {
+      const orb = document.createElement('span');
+      orb.className = 'line-orb';
+      const c = lineColor(k);
+      orb.style.background = `rgb(${c.join(',')})`;
+      orb.title = lineDefByKey(k)?.name || k;
+      wrap.appendChild(orb);
+    }
+    if (keys.length > max) {
+      const more = document.createElement('span');
+      more.className = 'line-orb-more';
+      more.textContent = `+${keys.length - max}`;
+      wrap.appendChild(more);
+    }
+    parent.appendChild(wrap);
+  }
+
+  function syncBrowseKindUi() {
+    document.getElementById('browse-kind-train')?.classList.toggle('active', browseKind === 'train');
+    document.getElementById('browse-kind-bus')?.classList.toggle('active', browseKind === 'bus');
+    document.getElementById('browse-kind-train')?.setAttribute('aria-pressed', String(browseKind === 'train'));
+    document.getElementById('browse-kind-bus')?.setAttribute('aria-pressed', String(browseKind === 'bus'));
   }
 
   function closeBrowse() {
@@ -390,51 +651,104 @@ async function boot() {
   function openBrowse(mode = 'lines') {
     browseMode = mode;
     browseEl?.classList.add('open');
-    browseEl?.classList.toggle('mode-search', mode === 'search');
+    browseEl?.classList.toggle('mode-search', mode === 'search' && browseKind === 'train');
     document.getElementById('fab-lines')?.setAttribute('aria-pressed', String(mode !== 'search'));
     document.getElementById('fab-search')?.setAttribute('aria-pressed', String(mode === 'search'));
+    syncBrowseKindUi();
     if (mode === 'lines') renderBrowseLines();
-    else if (mode === 'stations') renderBrowseStations(browseLineKey);
-    else renderBrowseSearch('');
-    if (mode === 'search') {
-      browseSearchInput?.focus();
+    else if (mode === 'directions' && browseKind === 'bus') {
+      renderBrowseBusDirections(browseBusRt);
+    } else if (mode === 'stations') {
+      if (browseKind === 'bus') renderBrowseBusStops(browseBusRt, browseBusRtdir);
+      else renderBrowseStations(browseLineKey);
+    } else {
+      browseKind = 'train';
+      syncBrowseKindUi();
+      renderBrowseSearch('');
     }
+    if (mode === 'search') browseSearchInput?.focus();
   }
 
   function renderBrowseLines() {
     if (!browseList) return;
     browseMode = 'lines';
-    if (browseTitle) browseTitle.textContent = 'Lines';
     if (browseBack) browseBack.hidden = true;
     browseEl?.classList.remove('mode-search');
     browseList.replaceChildren();
-    for (const line of BROWSE_LINES) {
+    if (browseKind === 'bus') {
+      if (browseTitle) browseTitle.textContent = 'Bus routes';
+      const routes = liveBusRoutes();
+      if (!routes.length || !busFeedReady) {
+        const empty = document.createElement('div');
+        empty.className = 'sheet-empty';
+        empty.textContent = busFeedReady ? 'NO LIVE ROUTES' : 'BUS DATA OFF';
+        browseList.appendChild(empty);
+        return;
+      }
+      for (const route of routes) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'browse-row';
+        const badge = document.createElement('span');
+        badge.className = 'bus-route-badge';
+        badge.textContent = route.rt;
+        btn.appendChild(badge);
+        const name = document.createElement('span');
+        name.className = 'browse-name';
+        name.textContent = route.name;
+        btn.appendChild(name);
+        const meta = document.createElement('span');
+        meta.className = 'meta';
+        meta.textContent = 'LIVE';
+        btn.appendChild(meta);
+        const chev = document.createElement('span');
+        chev.className = 'browse-chevron';
+        chev.textContent = '›';
+        btn.appendChild(chev);
+        btn.addEventListener('click', () => {
+          browseBusRt = route.rt;
+          browseBusRtdir = '';
+          renderBrowseBusDirections(route.rt);
+        });
+        browseList.appendChild(btn);
+      }
+      return;
+    }
+
+    if (browseTitle) browseTitle.textContent = 'Train lines';
+    const lines = browseLinesLive();
+    if (!lines.length) {
+      const empty = document.createElement('div');
+      empty.className = 'sheet-empty';
+      empty.textContent = 'NO LIVE LINES';
+      browseList.appendChild(empty);
+      return;
+    }
+    for (const line of lines) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'browse-row';
-      btn.disabled = !line.live;
       const sw = document.createElement('span');
       sw.className = 'browse-swatch';
       sw.style.background = `rgb(${line.color.join(',')})`;
       sw.style.color = `rgb(${line.color.join(',')})`;
       btn.appendChild(sw);
       const name = document.createElement('span');
+      name.className = 'browse-name';
       name.textContent = line.name;
       btn.appendChild(name);
       const meta = document.createElement('span');
       meta.className = 'meta';
-      meta.textContent = line.live ? 'LIVE' : 'SOON';
+      meta.textContent = 'LIVE';
       btn.appendChild(meta);
       const chev = document.createElement('span');
       chev.className = 'browse-chevron';
       chev.textContent = '›';
       btn.appendChild(chev);
-      if (line.live) {
-        btn.addEventListener('click', () => {
-          browseLineKey = line.key;
-          renderBrowseStations(line.key);
-        });
-      }
+      btn.addEventListener('click', () => {
+        browseLineKey = line.key;
+        renderBrowseStations(line.key);
+      });
       browseList.appendChild(btn);
     }
   }
@@ -442,12 +756,14 @@ async function boot() {
   function renderBrowseStations(lineKey) {
     if (!browseList) return;
     browseMode = 'stations';
-    const line = BROWSE_LINES.find((l) => l.key === lineKey) || BROWSE_LINES[0];
-    if (browseTitle) browseTitle.textContent = line.name;
+    browseKind = 'train';
+    syncBrowseKindUi();
+    const line = lineDefByKey(lineKey) || browseLinesLive()[0];
+    if (browseTitle) browseTitle.textContent = line?.name || lineKey;
     if (browseBack) browseBack.hidden = false;
     browseEl?.classList.remove('mode-search');
     browseList.replaceChildren();
-    const list = lineKey === 'Org' ? orderedOrg() : [];
+    const list = orderedForLine(lineKey);
     if (!list.length) {
       const empty = document.createElement('div');
       empty.className = 'sheet-empty';
@@ -459,18 +775,103 @@ async function boot() {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'browse-row';
-      const sw = document.createElement('span');
-      sw.className = 'browse-swatch';
-      sw.style.background = `rgb(${line.color.join(',')})`;
-      btn.appendChild(sw);
+      appendLineOrbs(btn, s.lines || [lineKey]);
       const name = document.createElement('span');
-      name.textContent = String(s.name || s.id).replace(/\s*\(Orange\)\s*/i, '');
+      name.className = 'browse-name';
+      name.textContent = cleanStationName(s.name || s.id);
       btn.appendChild(name);
       const chev = document.createElement('span');
       chev.className = 'browse-chevron';
       chev.textContent = '›';
       btn.appendChild(chev);
-      btn.addEventListener('click', () => openStation(s, { fly: true }));
+      btn.addEventListener('click', () => openStation(s, { fly: true, source: 'stations', lineKey: browseLineKey }));
+      browseList.appendChild(btn);
+    }
+  }
+
+  /** CTA-style: pick Northbound / Southbound before the stop list. */
+  function renderBrowseBusDirections(rt) {
+    if (!browseList) return;
+    browseMode = 'directions';
+    browseKind = 'bus';
+    browseBusRt = String(rt);
+    browseBusRtdir = '';
+    syncBrowseKindUi();
+    const def = busRouteDef(rt);
+    if (browseTitle) browseTitle.textContent = `${rt} · ${def?.name || 'Bus'}`;
+    if (browseBack) browseBack.hidden = false;
+    browseEl?.classList.remove('mode-search');
+    browseList.replaceChildren();
+    const dirs = directionsForRoute(busPatterns, rt);
+    if (!dirs.length) {
+      // Legacy bake without directions — fall through to flat list if any.
+      renderBrowseBusStops(rt, '');
+      return;
+    }
+    for (const d of dirs) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'browse-row';
+      const name = document.createElement('span');
+      name.className = 'browse-name';
+      name.textContent = d.rtdir;
+      btn.appendChild(name);
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = `${d.stops?.length || 0} STOPS`;
+      btn.appendChild(meta);
+      const chev = document.createElement('span');
+      chev.className = 'browse-chevron';
+      chev.textContent = '›';
+      btn.appendChild(chev);
+      btn.addEventListener('click', () => {
+        browseBusRtdir = d.rtdir;
+        renderBrowseBusStops(rt, d.rtdir);
+      });
+      browseList.appendChild(btn);
+    }
+  }
+
+  function renderBrowseBusStops(rt, rtdir = browseBusRtdir) {
+    if (!browseList) return;
+    browseMode = 'stations';
+    browseKind = 'bus';
+    browseBusRt = String(rt);
+    browseBusRtdir = String(rtdir || '');
+    syncBrowseKindUi();
+    const def = busRouteDef(rt);
+    const dirLabel = browseBusRtdir ? ` · ${browseBusRtdir}` : '';
+    if (browseTitle) browseTitle.textContent = `${rt} · ${def?.name || 'Bus'}${dirLabel}`;
+    if (browseBack) browseBack.hidden = false;
+    browseEl?.classList.remove('mode-search');
+    browseList.replaceChildren();
+    const list = stopsForRoute(busPatterns, rt, browseBusRtdir || undefined);
+    if (!list.length) {
+      const empty = document.createElement('div');
+      empty.className = 'sheet-empty';
+      empty.textContent = 'NO STOPS';
+      browseList.appendChild(empty);
+      return;
+    }
+    for (const stop of list) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'browse-row';
+      const badge = document.createElement('span');
+      badge.className = 'bus-route-badge bus-route-badge-sm';
+      badge.textContent = rt;
+      btn.appendChild(badge);
+      const name = document.createElement('span');
+      name.className = 'browse-name';
+      name.textContent = stop.name || stop.stpid;
+      btn.appendChild(name);
+      const chev = document.createElement('span');
+      chev.className = 'browse-chevron';
+      chev.textContent = '›';
+      btn.appendChild(chev);
+      btn.addEventListener('click', () =>
+        openBusStop(stop, { rt, rtdir: browseBusRtdir, source: 'stations' }),
+      );
       browseList.appendChild(btn);
     }
   }
@@ -478,11 +879,13 @@ async function boot() {
   function renderBrowseSearch(q) {
     if (!browseList) return;
     browseMode = 'search';
-    if (browseTitle) browseTitle.textContent = 'Search';
+    browseKind = 'train';
+    syncBrowseKindUi();
+    if (browseTitle) browseTitle.textContent = 'Search stations';
     if (browseBack) browseBack.hidden = true;
     browseEl?.classList.add('mode-search');
     browseList.replaceChildren();
-    const hits = searchStations(orderedOrg(), q);
+    const hits = searchStations(liveStationsUnion(stations), q);
     if (!q.trim()) {
       const empty = document.createElement('div');
       empty.className = 'sheet-empty';
@@ -501,21 +904,37 @@ async function boot() {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'browse-row';
-      const sw = document.createElement('span');
-      sw.className = 'browse-swatch';
-      sw.style.background = 'rgb(255,105,28)';
-      btn.appendChild(sw);
+      appendLineOrbs(btn, s.lines || []);
       const name = document.createElement('span');
-      name.textContent = String(s.name || s.id).replace(/\s*\(Orange\)\s*/i, '');
+      name.className = 'browse-name';
+      name.textContent = cleanStationName(s.name || s.id);
       btn.appendChild(name);
-      btn.addEventListener('click', () => openStation(s, { fly: true }));
+      btn.addEventListener('click', () =>
+        openStation(s, {
+          fly: true,
+          source: 'search',
+          query: browseSearchInput?.value || '',
+        }),
+      );
       browseList.appendChild(btn);
     }
   }
 
   document.getElementById('browse-close')?.addEventListener('click', closeBrowse);
   document.getElementById('browse-back')?.addEventListener('click', () => {
-    if (browseMode === 'stations') renderBrowseLines();
+    if (browseKind === 'bus' && browseMode === 'stations') {
+      renderBrowseBusDirections(browseBusRt);
+      return;
+    }
+    if (browseMode === 'stations' || browseMode === 'directions') renderBrowseLines();
+  });
+  document.getElementById('browse-kind-train')?.addEventListener('click', () => {
+    browseKind = 'train';
+    openBrowse('lines');
+  });
+  document.getElementById('browse-kind-bus')?.addEventListener('click', () => {
+    browseKind = 'bus';
+    openBrowse('lines');
   });
   document.getElementById('fab-lines')?.addEventListener('click', () => {
     if (browseEl?.classList.contains('open') && browseMode !== 'search') closeBrowse();
@@ -535,7 +954,7 @@ async function boot() {
       nearestChip?.classList.remove('visible');
       return;
     }
-    const hit = nearestStation([userFix.lon, userFix.lat], orgStationsForWalk());
+    const hit = nearestStation([userFix.lon, userFix.lat], liveStationsForWalk());
     if (!hit) {
       nearestChip.classList.remove('visible');
       return;
@@ -543,7 +962,7 @@ async function boot() {
     const mins = walkMinutes(hit.distM);
     nearestChip.textContent = `${hit.station.name} · ~${mins} min walk`;
     nearestChip.classList.add('visible');
-    nearestChip.onclick = () => openStation(hit.station);
+    nearestChip.onclick = () => openStation(hit.station, { source: 'map' });
   }
 
   function enableLocation() {
@@ -675,6 +1094,7 @@ async function boot() {
     }
 
     const trains = engine.tick();
+    const buses = busFeedReady ? busEngine.tick() : [];
 
     if (followed) {
       const vehicle = trains.find((v) => v.id === followed.id);
@@ -689,8 +1109,8 @@ async function boot() {
       for (const key of trackKeys) {
         const tag = alertsEngine.lineStatus[key] ?? 'normal';
         let opacityMult = lineStressTreatment(tag, currentTime).opacityMult;
-        // Dim non-Org tracks hard
-        if (key !== 'Org') opacityMult *= 0.15;
+        // Dim non-live tracks
+        if (!visibleLines.has(key)) opacityMult *= 0.12;
         if (lastStressOpacity.get(key) === opacityMult) continue;
         lastStressOpacity.set(key, opacityMult);
         map.setFeatureState({ source: 'l-tracks', id: key }, { stressOpacity: opacityMult });
@@ -701,8 +1121,8 @@ async function boot() {
         trailVersion: engine.trailVersion,
         stations,
         display,
-        buses: [],
-        busTrailVersion: 0,
+        buses,
+        busTrailVersion: busEngine.trailVersion,
         viewportCenter: [center.lng, center.lat],
         cars: [],
         zoom: map.getZoom(),
@@ -720,6 +1140,7 @@ async function boot() {
 
   window.__map = map;
   window.__engine = engine;
+  window.__busEngine = busEngine;
   window.__hud = hud;
   window.__arrivals = arrivals;
   window.__alertsEngine = alertsEngine;

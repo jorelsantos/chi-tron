@@ -56,13 +56,14 @@ describe('buildLayers tip-only trains', () => {
     b: { id: 'b', coords: [-87.61, 41.91], lines: ['Blue'], weight: 0.5 },
   };
 
-  it('draws live train trails and tip discs', () => {
+  it('draws live train trails and bolt tips', () => {
     const layers = buildLayers(trains, 0, visibleLines, {
       stations,
       display: { trains: true, stations: false },
     });
     expect(layerById(layers, 'trails').props.data.length).toBe(1);
-    expect(layerById(layers, 'glow-core').props.data.length).toBe(1);
+    expect(layerById(layers, 'train-bolt-core').props.data.length).toBe(1);
+    expect(layerById(layers, 'train-bolt-halo').props.data.length).toBe(1);
   });
 
   it('empties trail data when display.trains is false', () => {
@@ -118,12 +119,21 @@ describe('lineStressTreatment (U15)', () => {
 });
 
 describe('buildLayers picking scope (U17)', () => {
-  it('enables pickable on bus/car layers only (no train heads in tip-only)', () => {
+  it('enables pickable on train bolt core, bus capsules, car bodies', () => {
     const layers = buildLayers([], 0, new Set(['Red']), {});
-    expect(layerById(layers, 'glow-halo').props.pickable).not.toBe(true);
+    expect(layerById(layers, 'train-bolt-halo').props.pickable).not.toBe(true);
+    expect(layerById(layers, 'train-bolt-core').props.pickable).toBe(true);
     expect(layerById(layers, 'bus-capsules').props.pickable).toBe(true);
     expect(layerById(layers, 'car-bodies').props.pickable).toBe(true);
     expect(layerById(layers, 'trails').props.pickable).not.toBe(true);
+  });
+});
+
+describe('stationLineRgb', () => {
+  it('uses the visible line color for a station', async () => {
+    const { stationLineRgb } = await import('./layers.js');
+    const rgb = stationLineRgb({ lines: ['Blue'] }, new Set(['Blue', 'Org']));
+    expect(rgb[2]).toBeGreaterThan(rgb[0]); // blue channel high for Blue line
   });
 });
 

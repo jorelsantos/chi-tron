@@ -33,8 +33,11 @@ const MAX_ROUTES_PER_CALL = 10; // KTD5: getvehicles hard cap
 // keys, so this copy exists only for callers (main.js, tests) that want the
 // list without loading the built JSON, and for #pollOnce's fallback when a
 // caller constructs a BusEngine with no patterns data at all.
+// Default marquee (patterns bake set). Live poll list is overridden by
+// patternsData.routes keys when provided (main.js passes 8+62 only).
 export const MARQUEE_ROUTES = [
-  '22', '4', '8', '9', '20', '49', '151', '6', '3', '66',
+  '8', '62',
+  '22', '4', '9', '20', '49', '151', '6', '3', '66',
   '77', '79', '80', '82', '146', '147', '152', '55', '63', 'X9',
 ];
 
