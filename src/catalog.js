@@ -8,7 +8,8 @@
 export const LINE_DEFS = [
   { key: 'Red', rt: 'red', name: 'Red Line', live: true, color: [255, 45, 72] },
   { key: 'Blue', rt: 'blue', name: 'Blue Line', live: true, color: [0, 196, 255] },
-  { key: 'Brn', rt: 'brn', name: 'Brown Line', live: true, color: [210, 118, 48] },
+  // Vivid CTA-ish brown (not copper/orange — distinct from Org [255,105,28])
+  { key: 'Brn', rt: 'brn', name: 'Brown Line', live: true, color: [155, 82, 32] },
   { key: 'G', rt: 'g', name: 'Green Line', live: true, color: [20, 230, 95] },
   { key: 'Org', rt: 'org', name: 'Orange Line', live: true, color: [255, 105, 28] },
   { key: 'P', rt: 'p', name: 'Purple Line', live: true, color: [155, 78, 255] },

@@ -17,19 +17,19 @@ import { diamondRing, pickSnapLine } from './stations-rail.js';
 // near-black stage. Official RGB → neon:
 //   Red    #c60c30 (227,25,55)   → hot neon red
 //   Blue   #00a1de (0,157,220)   → ice cyan-blue
-//   Brown  #62361b (118,66,0)    → copper-bronze (NOT chartreuse; that was a bug)
+//   Brown  #62361b official      → vivid brown (not copper/orange; distinct from Org)
 //   Green  #009b3a (0,169,79)    → electric green
 //   Orange #f47836 (244,120,54)  → hot mango orange
 //   Purple #522398 (73,47,146)   → vivid violet
 //   Pink   #e27ea6 (243,139,185) → hot pink
 //   Yellow (Skokie Swift gold)   → light amber-gold (lighter orange family,
-//                                  not pure lemon — distinguishable from Brown copper)
+//                                  not pure lemon — distinguishable from Brown)
 export const LINE_COLORS = {
   Red: [255, 45, 72],
   Blue: [0, 196, 255],
-  Brn: [210, 118, 48], // copper-brown — reads "Brown Line," not Yellow
+  Brn: [155, 82, 32], // vivid brown — CTA-ish, not orange/copper
   G: [20, 230, 95],
-  Org: [255, 105, 28], // hot orange — distinct from Brown copper + Yellow gold
+  Org: [255, 105, 28], // hot orange — clear gap from Brown
   P: [155, 78, 255],
   Pink: [255, 90, 185],
   Y: [255, 200, 70], // light amber / pale orange-gold (Skokie Swift energy)

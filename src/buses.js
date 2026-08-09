@@ -12,6 +12,7 @@
 import { Poller, DEFAULT_DAILY_CEILING } from './poller.js';
 import { now } from './trains.js';
 import { bearingDeg, interpAtDist } from './tracks.js';
+import { MARQUEE_ROUTES as CATALOG_MARQUEE } from './bus-catalog.js';
 
 const POLL_MS = 15000;
 // U16's trains.js clamp (MAX_MOCK_DT_S) gets an equivalent here — a
@@ -27,19 +28,10 @@ const STALE_POLLS = 2; // absent this many polls -> stale -> removed (mirrors tr
 const TRAIL_SECONDS = 30; // shorter than trains' 60s — buses get a dimmer, briefer trail (KTD12)
 const MAX_ROUTES_PER_CALL = 10; // KTD5: getvehicles hard cap
 
-// The ~20 marquee high-frequency routes this feed polls live and the mock
-// generator walks. Must match scripts/build-patterns.mjs's MARQUEE_ROUTES
-// exactly — that script is what actually produces patterns.json's `routes`
-// keys, so this copy exists only for callers (main.js, tests) that want the
-// list without loading the built JSON, and for #pollOnce's fallback when a
-// caller constructs a BusEngine with no patterns data at all.
-// Default marquee (patterns bake set). Live poll list is overridden by
-// patternsData.routes keys when provided (main.js passes 8+62 only).
-export const MARQUEE_ROUTES = [
-  '8', '62',
-  '22', '4', '9', '20', '49', '151', '6', '3', '66',
-  '77', '79', '80', '82', '146', '147', '152', '55', '63', 'X9',
-];
+// Marquee / mapLive fallback from bus-catalog (bake uses the same list).
+// Live poll list is overridden by patternsData.routes when main.js passes
+// mapLive-filtered patterns (~21 routes, not all 126).
+export const MARQUEE_ROUTES = CATALOG_MARQUEE;
 
 // Plausible bus road speed range in feet/sec (patterns.json's distance unit
 // — see build-patterns.mjs), used only by seedMock/EXPLORE mode. ~10-17mph

@@ -923,7 +923,8 @@
         radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.35) 0%, transparent 42%),
         rgb(90, 150, 230) !important;
     }
-    #browse-sheet.mode-search #browse-kind { display: none; }
+    /* Station search hides Train|Bus; bus route filter keeps the toggle. */
+    #browse-sheet.mode-search:not(.mode-bus-list) #browse-kind { display: none; }
     #browse-search-input {
       display: none; width: calc(100% - 28px); margin: 10px 14px 6px;
       padding: 13px 16px; border-radius: 14px;
@@ -939,6 +940,7 @@
     }
     #browse-search-input::placeholder { color: var(--type-tertiary); }
     #browse-sheet.mode-search #browse-search-input { display: block; }
+    #browse-sheet.mode-bus-list #browse-search-input { display: block; }
     #browse-list {
       overflow-y: auto; -webkit-overflow-scrolling: touch;
       padding: 6px 10px 14px; flex: 1;

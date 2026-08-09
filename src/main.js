@@ -38,10 +38,14 @@ import {
 } from './catalog.js';
 import {
   liveBusRoutes,
+  mapLiveBusRouteIds,
   filterPatternsToRoutes,
   directionsForRoute,
   stopsForRoute,
   busRouteDef,
+  normalizeBusCatalog,
+  searchBusRoutes,
+  routesWithDirections,
 } from './bus-catalog.js';
 
 // Live L nav: all lines with live:true in catalog LINE_DEFS.
@@ -120,18 +124,26 @@ async function boot() {
       console.warn('[chi-tron] patterns.json failed — bus layer off:', err.message);
       return {};
     });
+  const busRoutesPromise = fetch('/data/bus-routes.json')
+    .then((r) => (r.ok ? r.json() : {}))
+    .catch(() => ({}));
 
   setBusStatus('disabled');
 
   const tracks = await tracksPromise;
   stationsRaw = await stationsPromise;
   const patternsRaw = await patternsPromise;
+  const busRoutesRaw = await busRoutesPromise;
   // Snap markers onto rail geometry so the 3D world reads as one system.
   stations = snapStationsToRails(tracks, stationsRaw);
-  const busPatterns = filterPatternsToRoutes(patternsRaw);
+  const busCatalog = normalizeBusCatalog(busRoutesRaw);
+  // Map poll = mapLive only; routeDirections kept for full tracker browse.
+  const busPatterns = filterPatternsToRoutes(patternsRaw, mapLiveBusRouteIds(busCatalog));
   const busEngine = new BusEngine(busPatterns);
   const busArrivals = new BusArrivalsSession();
-  const busFeedReady = Object.keys(busPatterns.routes || {}).length > 0;
+  const busBoardRoutes = routesWithDirections(busPatterns, busCatalog);
+  const busFeedReady = busBoardRoutes.length > 0;
+  const busMapReady = Object.keys(busPatterns.routes || {}).length > 0;
 
   // Single full-bleed map — cold steel + cyan haze baseline, tip-only pulses.
   const map = new maplibregl.Map({
@@ -277,9 +289,12 @@ async function boot() {
     stations: true,
   };
 
-  if (busFeedReady) {
+  if (busMapReady) {
     busEngine.onStatus = (state) => setBusStatus(state);
     busEngine.startLive();
+  } else if (busFeedReady) {
+    // Tracker boards work without map vehicles.
+    setBusStatus('disabled');
   } else {
     setBusStatus('disabled');
   }
@@ -493,7 +508,7 @@ async function boot() {
     if (!stop?.stpid) return;
     const routeRt = String(rt || browseBusRt);
     const dir = rtdir || browseBusRtdir || '';
-    const def = busRouteDef(routeRt);
+    const def = busRouteDef(busCatalog, routeRt) || busRouteDef(routeRt);
     boardNav = {
       source,
       kind: 'bus',
@@ -602,9 +617,10 @@ async function boot() {
   /** @type {'lines'|'directions'|'stations'|'search'} */
   let browseMode = 'lines';
   let browseLineKey = liveLineKeys()[0] || 'Org';
-  let browseBusRt = liveBusRoutes()[0]?.rt || '8';
+  let browseBusRt = liveBusRoutes(busCatalog)[0]?.rt || '8';
   /** @type {string} CTA rtdir e.g. Northbound */
   let browseBusRtdir = '';
+  let browseBusQuery = '';
 
   function orderedForLine(lineKey) {
     return stationsOrdered(stations, lineKey);
@@ -643,20 +659,29 @@ async function boot() {
   function closeBrowse() {
     browseEl?.classList.remove('open');
     browseEl?.classList.remove('mode-search');
+    browseEl?.classList.remove('mode-bus-list');
     document.getElementById('fab-lines')?.setAttribute('aria-pressed', 'false');
     document.getElementById('fab-search')?.setAttribute('aria-pressed', 'false');
     if (browseSearchInput) browseSearchInput.value = '';
+    browseBusQuery = '';
   }
 
   function openBrowse(mode = 'lines') {
     browseMode = mode;
     browseEl?.classList.add('open');
+    const showBusSearch = browseKind === 'bus' && mode === 'lines';
     browseEl?.classList.toggle('mode-search', mode === 'search' && browseKind === 'train');
+    browseEl?.classList.toggle('mode-bus-list', showBusSearch);
     document.getElementById('fab-lines')?.setAttribute('aria-pressed', String(mode !== 'search'));
     document.getElementById('fab-search')?.setAttribute('aria-pressed', String(mode === 'search'));
     syncBrowseKindUi();
-    if (mode === 'lines') renderBrowseLines();
-    else if (mode === 'directions' && browseKind === 'bus') {
+    if (mode === 'lines') {
+      if (browseKind === 'bus' && browseSearchInput) {
+        browseSearchInput.placeholder = 'Route # or name…';
+        browseSearchInput.value = browseBusQuery;
+      }
+      renderBrowseLines();
+    } else if (mode === 'directions' && browseKind === 'bus') {
       renderBrowseBusDirections(browseBusRt);
     } else if (mode === 'stations') {
       if (browseKind === 'bus') renderBrowseBusStops(browseBusRt, browseBusRtdir);
@@ -664,24 +689,37 @@ async function boot() {
     } else {
       browseKind = 'train';
       syncBrowseKindUi();
+      if (browseSearchInput) browseSearchInput.placeholder = 'Station name…';
       renderBrowseSearch('');
     }
-    if (mode === 'search') browseSearchInput?.focus();
+    if (mode === 'search' || showBusSearch) browseSearchInput?.focus();
   }
 
   function renderBrowseLines() {
     if (!browseList) return;
     browseMode = 'lines';
     if (browseBack) browseBack.hidden = true;
-    browseEl?.classList.remove('mode-search');
     browseList.replaceChildren();
     if (browseKind === 'bus') {
+      browseEl?.classList.add('mode-bus-list');
+      browseEl?.classList.remove('mode-search');
       if (browseTitle) browseTitle.textContent = 'Bus routes';
-      const routes = liveBusRoutes();
-      if (!routes.length || !busFeedReady) {
+      if (browseSearchInput) {
+        browseSearchInput.placeholder = 'Route # or name…';
+        browseSearchInput.value = browseBusQuery;
+      }
+      const routes = searchBusRoutes(busBoardRoutes, browseBusQuery);
+      if (!busFeedReady) {
         const empty = document.createElement('div');
         empty.className = 'sheet-empty';
-        empty.textContent = busFeedReady ? 'NO LIVE ROUTES' : 'BUS DATA OFF';
+        empty.textContent = 'BUS DATA OFF';
+        browseList.appendChild(empty);
+        return;
+      }
+      if (!routes.length) {
+        const empty = document.createElement('div');
+        empty.className = 'sheet-empty';
+        empty.textContent = browseBusQuery.trim() ? 'NO MATCH' : 'NO LIVE ROUTES';
         browseList.appendChild(empty);
         return;
       }
@@ -699,7 +737,7 @@ async function boot() {
         btn.appendChild(name);
         const meta = document.createElement('span');
         meta.className = 'meta';
-        meta.textContent = 'LIVE';
+        meta.textContent = route.mapLive ? 'MAP' : 'LIVE';
         btn.appendChild(meta);
         const chev = document.createElement('span');
         chev.className = 'browse-chevron';
@@ -714,6 +752,9 @@ async function boot() {
       }
       return;
     }
+
+    browseEl?.classList.remove('mode-search');
+    browseEl?.classList.remove('mode-bus-list');
 
     if (browseTitle) browseTitle.textContent = 'Train lines';
     const lines = browseLinesLive();
@@ -797,10 +838,11 @@ async function boot() {
     browseBusRt = String(rt);
     browseBusRtdir = '';
     syncBrowseKindUi();
-    const def = busRouteDef(rt);
+    const def = busRouteDef(busCatalog, rt) || busRouteDef(rt);
     if (browseTitle) browseTitle.textContent = `${rt} · ${def?.name || 'Bus'}`;
     if (browseBack) browseBack.hidden = false;
     browseEl?.classList.remove('mode-search');
+    browseEl?.classList.remove('mode-bus-list');
     browseList.replaceChildren();
     const dirs = directionsForRoute(busPatterns, rt);
     if (!dirs.length) {
@@ -839,11 +881,12 @@ async function boot() {
     browseBusRt = String(rt);
     browseBusRtdir = String(rtdir || '');
     syncBrowseKindUi();
-    const def = busRouteDef(rt);
+    const def = busRouteDef(busCatalog, rt) || busRouteDef(rt);
     const dirLabel = browseBusRtdir ? ` · ${browseBusRtdir}` : '';
     if (browseTitle) browseTitle.textContent = `${rt} · ${def?.name || 'Bus'}${dirLabel}`;
     if (browseBack) browseBack.hidden = false;
     browseEl?.classList.remove('mode-search');
+    browseEl?.classList.remove('mode-bus-list');
     browseList.replaceChildren();
     const list = stopsForRoute(busPatterns, rt, browseBusRtdir || undefined);
     if (!list.length) {
@@ -945,6 +988,11 @@ async function boot() {
     else openBrowse('search');
   });
   browseSearchInput?.addEventListener('input', () => {
+    if (browseKind === 'bus' && browseMode === 'lines') {
+      browseBusQuery = browseSearchInput.value;
+      renderBrowseLines();
+      return;
+    }
     renderBrowseSearch(browseSearchInput.value);
   });
 
