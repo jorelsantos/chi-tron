@@ -4,3 +4,6 @@ dist/
 .DS_Store
 *.local
 .gstack/
+.vercel
+.env*
+sessions/
