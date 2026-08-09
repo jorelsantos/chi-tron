@@ -156,6 +156,7 @@ async function boot() {
   const busMapReady = Object.keys(busPatterns.routes || {}).length > 0;
 
   // Tracker cold-open: flat aerial Loop (2D). 3D via map view control.
+  // Mobile-first gestures: no double-click zoom; pinch only; no browser fight.
   const map = new maplibregl.Map({
     container: 'map',
     style: DARK_CITY_STYLE,
@@ -168,10 +169,21 @@ async function boot() {
     maxBounds: CHICAGOLAND_BOUNDS,
     antialias: true,
     attributionControl: { compact: true },
+    doubleClickZoom: false,
+    dragRotate: false,
+    pitchWithRotate: false,
+    touchPitch: false,
+    // One-finger pan + two-finger pinch only (Maps-like)
+    touchZoomRotate: true,
+    cooperativeGestures: false,
   });
   // Phase C: Chicagoland hard stop (also re-assert after style swap).
   map.setMaxBounds(CHICAGOLAND_BOUNDS);
   map.setMinZoom(CHICAGOLAND_MIN_ZOOM);
+  // Disable rotate on touch (keep pinch-zoom); re-enable pitch only in 3D mode.
+  map.touchZoomRotate.disableRotation();
+  map.dragRotate.disable();
+  map.touchPitch.disable();
   new ResizeObserver(() => map.resize()).observe(document.getElementById('map'));
   requestAnimationFrame(() => requestAnimationFrame(() => map.resize()));
 
@@ -335,12 +347,14 @@ async function boot() {
   function setMap2d() {
     mapIs3d = false;
     followMe = false;
+    map.touchPitch.disable();
     map.easeTo({ pitch: 0, bearing: 0, duration: 700, essential: true });
     syncViewButtons();
   }
   function setMap3d() {
     mapIs3d = true;
     followMe = false;
+    map.touchPitch.enable();
     map.easeTo({
       pitch: PITCH_3D,
       bearing: LOOP_3D.bearing,
@@ -353,6 +367,7 @@ async function boot() {
   function liveOverview() {
     followMe = false;
     mapIs3d = false;
+    map.touchPitch.disable();
     syncViewButtons();
     map.easeTo({
       center: CITY_2D.center,

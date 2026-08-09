@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>CHI-TRON</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -56,59 +59,90 @@
     html, body {
       height: 100%; background: #05060a; overflow: hidden;
       font-family: var(--font-ui);
+      /* Mobile-first: block browser pinch/double-tap page zoom over the map app */
+      touch-action: manipulation;
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
     }
-    #map { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #map {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      touch-action: none; /* MapLibre owns gestures */
+    }
+    .maplibregl-canvas-container,
+    .maplibregl-canvas {
+      touch-action: none;
+    }
 
     /* HUD chrome — never intercepts map interaction */
     .hud { position: absolute; z-index: 10; pointer-events: none; font-family: var(--font-mono); }
+
+    /* Compact mobile header: glass pill, not floating tall type */
     #wordmark {
-      top: 18px; left: 22px;
-      font-size: 22px; font-weight: 700; letter-spacing: 0.35em;
+      top: max(10px, env(safe-area-inset-top));
+      left: max(12px, env(safe-area-inset-left));
+      z-index: 16;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px 9px 14px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.62);
+      -webkit-backdrop-filter: blur(18px) saturate(1.1);
+      backdrop-filter: blur(18px) saturate(1.1);
+      box-shadow:
+        0 0 0 0.5px rgba(255, 255, 255, 0.12) inset,
+        0 8px 28px rgba(0, 0, 0, 0.45);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
       color: var(--neon-cyan);
-      text-shadow: 0 0 8px rgba(0, 212, 255, 0.9), 0 0 28px rgba(0, 212, 255, 0.45);
+      text-shadow: 0 0 10px rgba(0, 212, 255, 0.55);
+      line-height: 1;
     }
     #wordmark small {
-      display: block; font-size: 9px; font-weight: 400; letter-spacing: 0.42em;
-      color: var(--hud-dim); text-shadow: none; margin-top: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin: 0;
+      padding: 3px 7px;
+      border-radius: 999px;
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      color: #7dffb0;
+      background: rgba(40, 120, 70, 0.28);
+      border: 1px solid rgba(90, 220, 140, 0.35);
+      text-shadow: none;
     }
-    #clock {
-      top: 22px; right: 24px;
-      font-size: 18px; letter-spacing: 0.18em; color: var(--hud-dim);
-      text-shadow: 0 0 6px rgba(120, 160, 255, 0.35);
+    #wordmark small::before {
+      content: "";
+      width: 5px; height: 5px; border-radius: 50%;
+      background: #3bff6f;
+      box-shadow: 0 0 6px rgba(59, 255, 111, 0.9);
     }
-    #status {
-      top: 48px; right: 24px;
-      font-size: 10px; letter-spacing: 0.3em; color: var(--hud-dim);
+
+    /* Dev/status HUD — hidden on tracker mobile; DOM kept for main.js */
+    #clock,
+    #status,
+    #fps,
+    #bus-status,
+    #telemetry {
+      display: none !important;
     }
-    #status.live { color: #3bff6f; text-shadow: 0 0 6px rgba(59, 255, 111, 0.6); }
-    #status.lost { color: #ff3b4e; text-shadow: 0 0 6px rgba(255, 59, 78, 0.6); }
-    /* U14: BUDGET HOLD — the poll governor hit its self-imposed daily
-       ceiling (R10) and stopped issuing requests. Amber so it reads as a
-       deliberate, safe stop rather than the failure states green/red imply. */
-    #status.hold { color: #ffb020; text-shadow: 0 0 6px rgba(255, 176, 32, 0.6); }
-    #fps {
-      top: 66px; right: 24px;
-      font-size: 10px; letter-spacing: 0.2em; color: rgba(140, 160, 200, 0.5);
-    }
-    /* U9: the bus feed's own status, distinct from #status (trains) above —
-       three independent feeds (U12 step 5's plan) means one shared light
-       would either hide a bus-only outage or misreport a live train feed as
-       down. Same class/color vocabulary as #status, smaller and dimmer
-       since it's the secondary indicator. */
-    #bus-status {
-      top: 80px; right: 24px;
-      font-size: 9px; letter-spacing: 0.26em; color: rgba(140, 160, 200, 0.6);
-    }
-    #bus-status.live { color: #3bff6f; text-shadow: 0 0 6px rgba(59, 255, 111, 0.5); }
-    #bus-status.lost { color: #ff3b4e; text-shadow: 0 0 6px rgba(255, 59, 78, 0.5); }
-    #bus-status.hold { color: #ffb020; text-shadow: 0 0 6px rgba(255, 176, 32, 0.5); }
-    /* U9: patterns.json failed to load — buses are structurally off for the
-       whole session, not merely down/backing off. Dim gray reads as "not a
-       thing right now" rather than an error, distinct from live/lost/hold. */
-    #bus-status.disabled { color: rgba(140, 160, 200, 0.45); text-shadow: none; }
+    #status.live { color: #3bff6f; }
+    #status.lost { color: #ff3b4e; }
+    #status.hold { color: #ffb020; }
+    #bus-status.live { color: #3bff6f; }
+    #bus-status.lost { color: #ff3b4e; }
+    #bus-status.hold { color: #ffb020; }
+    #bus-status.disabled { color: rgba(140, 160, 200, 0.45); }
     #disclaimer {
-      bottom: 12px; left: 50%; transform: translateX(-50%); text-align: center;
-      font-size: 9px; letter-spacing: 0.14em; color: rgba(140, 160, 200, 0.4);
+      bottom: max(10px, env(safe-area-inset-bottom));
+      left: 50%; transform: translateX(-50%); text-align: center;
+      width: min(92vw, 420px);
+      font-size: 8px; letter-spacing: 0.1em; color: rgba(140, 160, 200, 0.38);
+      padding: 0 56px; /* clear FAB thumb zone */
+      pointer-events: none;
     }
 
     /* U17 (R14): click-to-follow HUD indicator — top-center, out of the
@@ -139,23 +173,15 @@
     }
     #follow-release:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
 
-    /* U12: top-right telemetry stack, below clock/status/fps, and the
-       compass beneath it. Same right-edge alignment and .hud typography as
-       the existing corner elements. */
-    #telemetry {
-      top: 106px; right: 24px; text-align: right;
-    }
-    #telemetry .telemetry-label {
-      display: block; font-size: 9px; letter-spacing: 0.28em;
-      color: var(--hud-dim);
-    }
-    #telemetry .telemetry-count {
-      display: block; margin-top: 3px; font-size: 16px; letter-spacing: 0.1em;
-      color: var(--neon-cyan);
-      text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
-    }
+    /* Compass — bottom-left, clear of FABs and map-view stack */
     #compass {
-      top: 152px; right: 24px; width: 34px; height: 34px;
+      top: auto;
+      right: auto;
+      bottom: max(52px, calc(env(safe-area-inset-bottom) + 40px));
+      left: max(12px, env(safe-area-inset-left));
+      width: 40px;
+      height: 40px;
+      opacity: 0.88;
     }
     #compass svg { width: 100%; height: 100%; display: block; overflow: visible; }
     #compass circle {
@@ -308,20 +334,16 @@
     #sidebar.nav-compact {
       display: none;
     }
-    #wordmark {
-      top: max(12px, env(safe-area-inset-top));
-      left: max(14px, env(safe-area-inset-left));
-    }
-    #wordmark small { letter-spacing: 0.22em; }
-    /* Hide wordmark when board open on mobile so board is clean */
+    /* Hide chrome when board open so board is clean */
     @media (max-width: 899px) {
-      body:has(#station-sheet.open) #wordmark { opacity: 0; pointer-events: none; }
-      body:has(#station-sheet.open) #clock,
-      body:has(#station-sheet.open) #status,
-      body:has(#station-sheet.open) #fps,
-      body:has(#station-sheet.open) #bus-status,
-      body:has(#station-sheet.open) #telemetry,
-      body:has(#station-sheet.open) #compass { opacity: 0; pointer-events: none; }
+      body:has(#station-sheet.open) #wordmark,
+      body:has(#station-sheet.open) #compass,
+      body:has(#station-sheet.open) .map-view-controls {
+        opacity: 0; pointer-events: none;
+      }
+      body:has(#browse-sheet.open) #wordmark {
+        opacity: 0.35;
+      }
     }
 
     /*
@@ -477,11 +499,11 @@
     .lg-org > .tron-brackets { --tron-bracket: var(--tron-org); }
     .lg-cyan > .tron-brackets { --tron-bracket: var(--tron-cyan); }
 
-    /* Map view: 2D / 3D / LIVE (Maps-style corner, not thumb FAB pile) */
+    /* Map view: 2D / 3D / LIVE — top-right, clear of header */
     .map-view-controls {
       position: absolute; z-index: 14;
       right: var(--safe-r);
-      top: max(72px, calc(env(safe-area-inset-top) + 56px));
+      top: max(10px, env(safe-area-inset-top));
       display: flex; flex-direction: column; gap: 8px;
       pointer-events: none;
     }
