@@ -3,11 +3,19 @@
 // cannot tell live from mock.
 
 import { prepareLine, snapToLine, pointAtDist } from './tracks.js';
+import { Poller, DEFAULT_DAILY_CEILING } from './poller.js';
+import { liveRouteCodes } from './catalog.js';
 
 const POLL_MS = 5000;
+// U14: this feed's ledger namespace (keyed off CTA_KEY, the real Train
+// Tracker key) — distinct from whatever storageKey the bus feed uses later
+// in this Phase B pass, so their daily ceilings never share one counter.
+const TRAIN_LEDGER_KEY = 'cta-train';
 const STALE_POLLS = 2; // absent this many polls → stale → removed
-const TRAIL_SECONDS = 60; // history kept per train
-const ROUTES = ['red', 'blue', 'brn', 'g', 'org', 'p', 'pink', 'y'];
+const TRAIL_SECONDS = 45; // live train trail length (seconds of history)
+// Derived from catalog LINE_DEFS.live — one multi-rt positions call.
+export const LIVE_ROUTES = liveRouteCodes();
+const ROUTES = LIVE_ROUTES;
 // API route codes → tracks.json line keys
 const ROUTE_TO_LINE = {
   red: 'Red', blue: 'Blue', brn: 'Brn', g: 'G',
@@ -17,6 +25,29 @@ const ROUTE_TO_LINE = {
 export function now() {
   return performance.now() / 1000; // seconds since page load — TripsLayer time base
 }
+
+// CTA's Train Tracker payload encodes booleans as the strings "1"/"0" (per
+// the developer guide), not JSON booleans — this normalizes either shape.
+export function toBool(v) {
+  return v === '1' || v === true || v === 1;
+}
+
+// U8: how often a mock train's synthetic isDly/isApp flags get re-rolled.
+// Randomized within this window so trains don't all flip in lockstep.
+const MOCK_FLAG_REROLL_MIN_S = 10;
+const MOCK_FLAG_REROLL_MAX_S = 30;
+const MOCK_DELAY_CHANCE = 0.1;
+const MOCK_APPROACH_CHANCE = 0.1;
+
+// U11's car simulation needed this same clamp for its own frozen/thawed
+// off-viewport cars and flagged that #tickMock has the identical unclamped
+// shape: a tab backgrounded (or just a long stall between frames) leaves
+// `now()` still advancing via performance.now(), so the next frame's dt
+// would cover the whole gap and jump a mock train's `dist` by
+// speed*dt — far enough to blow past a terminal bounce or land off-track
+// before the next poll/tick corrects it. Live mode doesn't need this: its
+// ease-toward-target rate is already clamped to 1 regardless of dt.
+const MAX_MOCK_DT_S = 1;
 
 export class TrainEngine {
   constructor(tracksData) {
@@ -51,7 +82,7 @@ export class TrainEngine {
   }
 
   #tickMock(train, t) {
-    const dt = t - train.lastTick;
+    const dt = Math.min(t - train.lastTick, MAX_MOCK_DT_S);
     train.dist += train.speed * train.dirSign * dt;
     const line = this.lines[train.line];
     if (train.dist >= line.totalDist || train.dist <= 0) {
@@ -59,6 +90,17 @@ export class TrainEngine {
       train.dist = Math.max(0, Math.min(train.dist, line.totalDist));
     }
     train.lastTick = t;
+
+    // U8 step 6: mock trains never receive real isDly/isApp from a feed, so
+    // synthesize occasional flips here — this is what makes the delayed/
+    // approaching render treatments (src/layers.js trainStyle) visible and
+    // testable under ?mock=1 with no live feed at all.
+    if (t >= train.nextFlagRoll) {
+      train.isDly = Math.random() < MOCK_DELAY_CHANCE;
+      train.isApp = Math.random() < MOCK_APPROACH_CHANCE;
+      train.nextFlagRoll =
+        t + MOCK_FLAG_REROLL_MIN_S + Math.random() * (MOCK_FLAG_REROLL_MAX_S - MOCK_FLAG_REROLL_MIN_S);
+    }
   }
 
   #appendTrail(train, t) {
@@ -95,6 +137,10 @@ export class TrainEngine {
           missedPolls: 0,
           trail: [],
           pos: null,
+          isDly: false,
+          isApp: false,
+          // Stagger initial re-roll so all seeded trains don't flip together.
+          nextFlagRoll: now() + Math.random() * MOCK_FLAG_REROLL_MAX_S,
         });
       }
     }
@@ -103,31 +149,63 @@ export class TrainEngine {
 
   // ---- live mode ----------------------------------------------------------
 
+  // U14: polling mechanics (visibility gate, single-flight, backoff, daily
+  // ledger/ceiling) now live entirely in src/poller.js's Poller — this
+  // engine only supplies what to fetch and how to ingest it. Built lazily
+  // here rather than in the constructor so mock mode (seedMock(), which
+  // never calls startLive()) never instantiates a Poller at all: no timer,
+  // no visibilitychange listener, no localStorage touch.
   startLive() {
-    const poll = async () => {
-      try {
-        const res = await fetch(
-          `/api/tt?rt=${ROUTES.join(',')}&outputType=JSON`
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        this.#ingest(data);
-        this.failures = 0;
-        this.onStatus('live');
-      } catch (err) {
-        console.warn('[chi-tron] poll failed:', err.message);
-        this.failures = (this.failures || 0) + 1;
-        this.onStatus(this.failures > 2 ? 'lost' : 'live');
-      }
-      // exponential backoff on repeated failure, capped at 60s
-      const delay = POLL_MS * Math.min(12, 2 ** (this.failures || 0));
-      this.timer = setTimeout(poll, delay);
-    };
-    poll();
+    // A fresh live session starts with a clean slate -- see buses.js's
+    // startLive() for why (code review finding).
+    this.failures = 0;
+    this.poller = new Poller({
+      storageKey: TRAIN_LEDGER_KEY,
+      intervalMs: POLL_MS,
+      ceiling: DEFAULT_DAILY_CEILING,
+      fetchFn: (signal) => this.#pollOnce(signal),
+      onStatus: (status, err) => this.#handlePollStatus(status, err),
+    });
+    this.poller.start();
   }
 
   stop() {
-    clearTimeout(this.timer);
+    this.poller?.stop();
+  }
+
+  // U16: a clean mode switch needs to drop whichever vehicle set the
+  // *previous* mode populated before the new one starts — seedMock() alone
+  // only ever adds/overwrites its own `mock-*` ids, so switching LIVE ->
+  // EXPLORE without this would leave stale live runs sitting in the Map
+  // forever (their last poll simply never gets another update once
+  // stop()'d, so they'd never even age into 'stale'/'removed' on their own).
+  clear() {
+    this.trains.clear();
+  }
+
+  async #pollOnce(signal) {
+    const res = await fetch(`/api/tt?rt=${ROUTES.join(',')}&outputType=JSON`, { signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    this.#ingest(data);
+  }
+
+  // Translates the governor's low-level 'ok'/'error'/'hold' outcomes into
+  // this engine's existing 'live'/'lost'/'hold' HUD states, preserving the
+  // pre-U14 hysteresis exactly: a single failed poll still reads as 'live'
+  // (transient blips shouldn't flip the HUD), only 3+ consecutive failures
+  // read as 'lost'.
+  #handlePollStatus(status, err) {
+    if (status === 'ok') {
+      this.failures = 0;
+      this.onStatus('live');
+    } else if (status === 'error') {
+      console.warn('[chi-tron] poll failed:', err.message);
+      this.failures = (this.failures || 0) + 1;
+      this.onStatus(this.failures > 2 ? 'lost' : 'live');
+    } else if (status === 'hold') {
+      this.onStatus('hold');
+    }
   }
 
   #ingest(data) {
@@ -147,11 +225,22 @@ export class TrainEngine {
         seen.add(id);
         const snap = snapToLine(line, [lon, lat]);
         const existing = this.trains.get(id);
+        const meta = {
+          rn: String(t.rn ?? ''),
+          destNm: t.destNm ?? '',
+          nextStaNm: t.nextStaNm ?? '',
+          nextStaId: t.nextStaId ?? '',
+          heading: Number.isFinite(parseFloat(t.heading)) ? parseFloat(t.heading) : null,
+          arrT: t.arrT ?? '',
+          isDly: toBool(t.isDly),
+          isApp: toBool(t.isApp),
+        };
         if (existing) {
           existing.dirSign = snap.dist >= existing.targetDist ? 1 : -1;
           existing.targetDist = snap.dist;
           existing.state = 'tracking';
           existing.missedPolls = 0;
+          Object.assign(existing, meta);
         } else {
           this.trains.set(id, {
             id,
@@ -166,6 +255,7 @@ export class TrainEngine {
             missedPolls: 0,
             trail: [],
             pos: null,
+            ...meta,
           });
         }
       }

@@ -8,10 +8,49 @@
     :root {
       --neon-cyan: #00d4ff;
       --hud-dim: rgba(160, 190, 255, 0.55);
+      /* Liquid Glass Neon — clearer lens so map neon bleeds through */
+      --glass-fill: rgba(16, 20, 36, 0.38);
+      --glass-fill-strong: rgba(12, 16, 30, 0.52);
+      --glass-blur: 32px;
+      --glass-sat: 1.75;
+      --glass-bright: 1.1;
+      --glass-radius: 22px;
+      --glass-radius-sm: 16px;
+      --fab-size: 64px;
+      /* Tron accents on glass (Phase B) — subtle, not nightclub */
+      --tron-org: #ff8c3c;
+      --tron-cyan: #00d4ff;
+      --tron-glow-org: rgba(255, 110, 40, 0.22);
+      --tron-glow-cyan: rgba(0, 212, 255, 0.2);
+      --tron-rail: rgba(255, 140, 60, 0.85);
+      --type-primary: #ffffff;
+      --type-secondary: rgba(220, 230, 250, 0.72);
+      --type-tertiary: rgba(180, 200, 230, 0.55);
+      --mins-size: 38px;
+      --cta-orange: #f9461c;
+      /* Spring sheet open (Phase C) */
+      --ease-sheet: 0.38s cubic-bezier(0.22, 1.15, 0.36, 1);
+      --ease-press: 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+      --safe-b: max(16px, env(safe-area-inset-bottom));
+      --safe-t: max(10px, env(safe-area-inset-top));
+      --safe-l: max(12px, env(safe-area-inset-left));
+      --safe-r: max(12px, env(safe-area-inset-right));
+      /* legacy aliases */
+      --glass-bg: var(--glass-fill);
+      --glass-bg-strong: var(--glass-fill-strong);
+      --glass-border: rgba(255, 255, 255, 0.14);
+      --glass-border-org: rgba(255, 140, 60, 0.55);
+      --glass-highlight: linear-gradient(165deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.06) 28%, rgba(255,255,255,0) 55%);
+    }
+    @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+      :root {
+        --glass-fill: rgba(10, 14, 26, 0.94);
+        --glass-fill-strong: rgba(8, 12, 22, 0.96);
+      }
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; background: #05060a; overflow: hidden; }
-    #map { position: absolute; inset: 0; }
+    #map { position: absolute; inset: 0; width: 100%; height: 100%; }
 
     /* HUD chrome — never intercepts map interaction */
     .hud { position: absolute; z-index: 10; pointer-events: none; font-family: "SF Mono", "Menlo", monospace; }
@@ -36,9 +75,994 @@
     }
     #status.live { color: #3bff6f; text-shadow: 0 0 6px rgba(59, 255, 111, 0.6); }
     #status.lost { color: #ff3b4e; text-shadow: 0 0 6px rgba(255, 59, 78, 0.6); }
+    /* U14: BUDGET HOLD — the poll governor hit its self-imposed daily
+       ceiling (R10) and stopped issuing requests. Amber so it reads as a
+       deliberate, safe stop rather than the failure states green/red imply. */
+    #status.hold { color: #ffb020; text-shadow: 0 0 6px rgba(255, 176, 32, 0.6); }
+    #fps {
+      top: 66px; right: 24px;
+      font-size: 10px; letter-spacing: 0.2em; color: rgba(140, 160, 200, 0.5);
+    }
+    /* U9: the bus feed's own status, distinct from #status (trains) above —
+       three independent feeds (U12 step 5's plan) means one shared light
+       would either hide a bus-only outage or misreport a live train feed as
+       down. Same class/color vocabulary as #status, smaller and dimmer
+       since it's the secondary indicator. */
+    #bus-status {
+      top: 80px; right: 24px;
+      font-size: 9px; letter-spacing: 0.26em; color: rgba(140, 160, 200, 0.6);
+    }
+    #bus-status.live { color: #3bff6f; text-shadow: 0 0 6px rgba(59, 255, 111, 0.5); }
+    #bus-status.lost { color: #ff3b4e; text-shadow: 0 0 6px rgba(255, 59, 78, 0.5); }
+    #bus-status.hold { color: #ffb020; text-shadow: 0 0 6px rgba(255, 176, 32, 0.5); }
+    /* U9: patterns.json failed to load — buses are structurally off for the
+       whole session, not merely down/backing off. Dim gray reads as "not a
+       thing right now" rather than an error, distinct from live/lost/hold. */
+    #bus-status.disabled { color: rgba(140, 160, 200, 0.45); text-shadow: none; }
     #disclaimer {
-      bottom: 12px; left: 22px;
+      bottom: 12px; left: 50%; transform: translateX(-50%); text-align: center;
       font-size: 9px; letter-spacing: 0.14em; color: rgba(140, 160, 200, 0.4);
+    }
+
+    /* U17 (R14): click-to-follow HUD indicator — top-center, out of the
+       way of the sidebar (left) and telemetry/compass stack (right).
+       Hidden entirely (not just empty) when nothing is followed, so it
+       never sits as a dead label. Unlike other .hud elements this one is
+       interactive (the release button), so pointer-events is switched back
+       on for it specifically. */
+    #follow-indicator {
+      top: 18px; left: 50%; transform: translateX(-50%);
+      display: none; align-items: center; gap: 10px;
+      padding: 8px 14px; pointer-events: auto;
+      background: linear-gradient(160deg, rgba(6, 9, 18, 0.78), rgba(4, 6, 13, 0.6));
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 212, 255, 0.35); border-radius: 8px;
+      font-size: 11px; letter-spacing: 0.14em; color: #cfe0ff;
+    }
+    #follow-indicator.visible { display: flex; }
+    #follow-indicator .follow-tag {
+      color: var(--neon-cyan); font-weight: 700;
+      text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
+    }
+    #follow-release {
+      border: 1px solid rgba(160, 190, 255, 0.3); border-radius: 4px;
+      padding: 3px 8px; background: rgba(255, 255, 255, 0.06);
+      color: var(--hud-dim); font-family: inherit; font-size: 9px;
+      letter-spacing: 0.14em; cursor: pointer;
+    }
+    #follow-release:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+
+    /* U12: top-right telemetry stack, below clock/status/fps, and the
+       compass beneath it. Same right-edge alignment and .hud typography as
+       the existing corner elements. */
+    #telemetry {
+      top: 106px; right: 24px; text-align: right;
+    }
+    #telemetry .telemetry-label {
+      display: block; font-size: 9px; letter-spacing: 0.28em;
+      color: var(--hud-dim);
+    }
+    #telemetry .telemetry-count {
+      display: block; margin-top: 3px; font-size: 16px; letter-spacing: 0.1em;
+      color: var(--neon-cyan);
+      text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
+    }
+    #compass {
+      top: 152px; right: 24px; width: 34px; height: 34px;
+    }
+    #compass svg { width: 100%; height: 100%; display: block; overflow: visible; }
+    #compass circle {
+      fill: rgba(5, 8, 16, 0.4); stroke: var(--hud-dim); stroke-width: 1;
+    }
+    #compass-rose {
+      transform-origin: 20px 20px; transition: transform 0.08s linear;
+    }
+    #compass-rose path { fill: var(--neon-cyan); }
+    #compass-rose text {
+      fill: var(--hud-dim); font-size: 7px; text-anchor: middle;
+      font-family: "SF Mono", "Menlo", monospace;
+    }
+
+    /* U12: instrument sidebar — glass panel, docks left below the wordmark.
+       Unlike other .hud elements this one is interactive, so pointer-events
+       is switched back on for the panel and (by inheritance) its buttons. */
+    #sidebar {
+      top: 78px; left: 16px; bottom: 16px; width: 300px;
+      pointer-events: auto;
+      display: flex; flex-direction: column; gap: 20px;
+      padding: 16px 14px;
+      overflow-y: auto;
+      background: linear-gradient(160deg, rgba(6, 9, 18, 0.72), rgba(4, 6, 13, 0.5));
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 212, 255, 0.22);
+      border-radius: 10px;
+      box-shadow: 0 0 30px rgba(0, 212, 255, 0.05) inset, 0 8px 30px rgba(0, 0, 0, 0.5);
+    }
+    #sidebar::-webkit-scrollbar { width: 6px; }
+    #sidebar::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.25); border-radius: 3px; }
+
+    .panel-header {
+      display: flex; align-items: baseline; justify-content: space-between;
+      margin-bottom: 8px; padding-bottom: 6px;
+      border-bottom: 1px solid rgba(160, 190, 255, 0.15);
+    }
+    .panel-title {
+      font-size: 11px; letter-spacing: 0.3em; color: var(--neon-cyan);
+      text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
+    }
+    .panel-scope {
+      font-size: 8px; letter-spacing: 0.22em; color: var(--hud-dim);
+    }
+    #line-rows, #display-rows {
+      display: flex; flex-direction: column; gap: 4px;
+    }
+
+    /* Shared row-button look: near-opaque scrim so legibility never depends
+       on what the map draws underneath (glass recipe, R6). */
+    .line-row, .toggle-row, .camera-row {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; border: 1px solid transparent; border-radius: 5px;
+      padding: 6px 8px;
+      background: rgba(5, 8, 17, 0.55);
+      color: #cfe0ff; font-family: inherit; font-size: 12px; letter-spacing: 0.04em;
+      text-align: left; cursor: pointer;
+      transition: background 0.15s, opacity 0.15s, border-color 0.15s;
+    }
+    .line-row:hover, .toggle-row:hover, .camera-row:hover { background: rgba(5, 8, 17, 0.8); }
+    .line-row .row-name, .toggle-row .row-name { flex: 1 1 auto; }
+    .line-row .row-count {
+      min-width: 26px; text-align: right; font-weight: 600; color: #fff;
+    }
+    .line-row .badge {
+      width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto;
+      background: var(--line-color); box-shadow: 0 0 6px var(--line-color);
+    }
+    .line-row[aria-pressed="false"] { opacity: 0.45; }
+    .line-row[aria-pressed="false"] .row-count { color: var(--hud-dim); }
+    .line-row[aria-pressed="false"] .badge {
+      background: transparent; box-shadow: inset 0 0 0 2px var(--line-color);
+    }
+
+    .toggle-row .dot {
+      width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto;
+      background: var(--neon-cyan); box-shadow: 0 0 6px var(--neon-cyan);
+    }
+    .toggle-row[aria-pressed="false"] { opacity: 0.45; }
+    .toggle-row[aria-pressed="false"] .dot {
+      background: transparent; box-shadow: inset 0 0 0 2px var(--hud-dim);
+    }
+
+    /* U13: camera preset buttons. Momentary, not stateful — no aria-pressed
+       dimming like line-row/toggle-row, since there's no persistent "on"
+       camera state to represent. `.is-flying` is added on click and removed
+       on the map's `moveend`, giving a brief in-flight brighten with no
+       highlight left over once the flight lands. */
+    #camera-rows { display: flex; flex-direction: column; gap: 4px; }
+    .camera-row { justify-content: center; font-weight: 600; letter-spacing: 0.18em; }
+    .camera-row.is-flying {
+      background: rgba(0, 212, 255, 0.22);
+      border-color: rgba(0, 212, 255, 0.55);
+      color: #fff;
+    }
+
+    /* U16: MODE — the app's primary two-state affordance (R13), so it's a
+       segmented control at the very top of the sidebar rather than one more
+       row buried in DISPLAY. Both states always visible; the active one
+       reads as pressed. */
+    #mode-rows { display: flex; gap: 6px; }
+    .mode-btn {
+      flex: 1 1 0; border: 1px solid rgba(160, 190, 255, 0.25); border-radius: 5px;
+      padding: 8px 6px; background: rgba(5, 8, 17, 0.55);
+      color: var(--hud-dim); font-family: inherit; font-weight: 700;
+      font-size: 12px; letter-spacing: 0.16em; text-align: center; cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .mode-btn:hover { background: rgba(5, 8, 17, 0.8); }
+    .mode-btn[aria-pressed="true"] {
+      background: rgba(0, 212, 255, 0.16);
+      border-color: rgba(0, 212, 255, 0.6);
+      color: #fff;
+      text-shadow: 0 0 6px rgba(0, 212, 255, 0.6);
+    }
+    /* U16 step 3: a LIVE mode that can't connect falls back to EXPLORE
+       visibly, not silently — this note flashes briefly rather than sitting
+       permanently once the fallback has already happened. */
+    #mode-fallback-note {
+      font-size: 10px; letter-spacing: 0.08em; color: #ffb020;
+      margin-top: 6px; display: none;
+    }
+    #mode-fallback-note.visible { display: block; }
+
+    /* U15: SYSTEM STATUS — read-only rows, not buttons (nothing to toggle
+       here), listing any line not in normal service. */
+    #status-rows { display: flex; flex-direction: column; gap: 6px; }
+    .status-row {
+      display: flex; align-items: baseline; gap: 8px;
+      font-size: 11px; letter-spacing: 0.03em;
+    }
+    .status-row .status-line { flex: 0 0 auto; font-weight: 600; }
+    .status-row .status-headline {
+      flex: 1 1 auto; color: var(--hud-dim);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .status-empty { font-size: 11px; color: var(--hud-dim); letter-spacing: 0.03em; }
+
+    #sidebar button:focus-visible,
+    .hud button:focus-visible {
+      outline: 2px solid var(--neon-cyan);
+      outline-offset: 2px;
+      box-shadow: 0 0 10px rgba(0, 212, 255, 0.7);
+    }
+
+    /* Live Nav — map-first chrome (Maps / Pokémon Go).
+       Hide instrument dock by default (not only after JS .nav-compact). */
+    #sidebar,
+    #sidebar.nav-compact {
+      display: none;
+    }
+    #wordmark {
+      top: max(12px, env(safe-area-inset-top));
+      left: max(14px, env(safe-area-inset-left));
+    }
+    #wordmark small { letter-spacing: 0.22em; }
+    /* Hide wordmark when board open on mobile so board is clean */
+    @media (max-width: 899px) {
+      body:has(#station-sheet.open) #wordmark { opacity: 0; pointer-events: none; }
+      body:has(#station-sheet.open) #clock,
+      body:has(#station-sheet.open) #status,
+      body:has(#station-sheet.open) #fps,
+      body:has(#station-sheet.open) #bus-status,
+      body:has(#station-sheet.open) #telemetry,
+      body:has(#station-sheet.open) #compass { opacity: 0; pointer-events: none; }
+    }
+
+    /*
+     * Liquid Glass material (web approx of Apple LG):
+     * layered fill + saturate blur + specular rim + thickness shadows.
+     * Optional SVG displacement for lens warp (prefers-reduced-motion off).
+     */
+    .lg {
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      border: none;
+      background:
+        linear-gradient(155deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 20%, rgba(255, 255, 255, 0) 45%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(0, 0, 0, 0.1) 100%),
+        var(--glass-fill);
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright));
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright));
+      box-shadow:
+        0 0 0 0.5px rgba(255, 255, 255, 0.35) inset,
+        0 1px 0 0 rgba(255, 255, 255, 0.22) inset,
+        0 -12px 28px rgba(0, 0, 0, 0.18) inset,
+        0 1px 2px rgba(0, 0, 0, 0.12),
+        0 12px 40px rgba(0, 0, 0, 0.42),
+        0 0 48px rgba(255, 110, 40, 0.07);
+      color: var(--type-primary);
+    }
+    .lg::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: 0;
+      background: linear-gradient(
+        125deg,
+        rgba(255, 255, 255, 0.28) 0%,
+        rgba(255, 255, 255, 0.06) 16%,
+        transparent 40%
+      );
+      opacity: 0.7;
+      mix-blend-mode: soft-light;
+    }
+    /* Gradient border ring (wet glass edge + Tron energy) */
+    .lg::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: 0;
+      padding: 1px;
+      background: linear-gradient(
+        125deg,
+        rgba(255, 255, 255, 0.55) 0%,
+        rgba(255, 255, 255, 0.12) 22%,
+        rgba(255, 130, 50, 0.55) 48%,
+        rgba(0, 212, 255, 0.35) 72%,
+        rgba(255, 255, 255, 0.2) 100%
+      );
+      background-size: 220% 220%;
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      mask-composite: exclude;
+    }
+    .lg > * { position: relative; z-index: 1; }
+    .lg-org {
+      box-shadow:
+        0 0 0 0.5px rgba(255, 255, 255, 0.3) inset,
+        0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
+        0 -12px 28px rgba(0, 0, 0, 0.2) inset,
+        0 12px 40px rgba(0, 0, 0, 0.45),
+        0 0 56px var(--tron-glow-org);
+    }
+    .lg-cyan {
+      box-shadow:
+        0 0 0 0.5px rgba(255, 255, 255, 0.3) inset,
+        0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
+        0 -12px 28px rgba(0, 0, 0, 0.2) inset,
+        0 12px 40px rgba(0, 0, 0, 0.45),
+        0 0 48px var(--tron-glow-cyan);
+    }
+    /* Living rim (Rim Pulse) — soft edge energy, not full neon flood */
+    @media (prefers-reduced-motion: no-preference) {
+      .lg-org {
+        animation: tron-glow-org 3.4s ease-in-out infinite;
+      }
+      .lg-cyan:not(.fab) {
+        animation: tron-glow-cyan 3.8s ease-in-out infinite;
+      }
+      .lg-org::after,
+      .lg-cyan::after {
+        animation: tron-rim-shift 5s linear infinite;
+        background-size: 200% 200%;
+      }
+    }
+    @keyframes tron-glow-org {
+      0%, 100% {
+        box-shadow:
+          0 0 0 0.5px rgba(255, 255, 255, 0.3) inset,
+          0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
+          0 -12px 28px rgba(0, 0, 0, 0.2) inset,
+          0 12px 40px rgba(0, 0, 0, 0.45),
+          0 0 40px rgba(255, 110, 40, 0.12);
+      }
+      50% {
+        box-shadow:
+          0 0 0 0.5px rgba(255, 255, 255, 0.35) inset,
+          0 1px 0 0 rgba(255, 255, 255, 0.25) inset,
+          0 -12px 28px rgba(0, 0, 0, 0.2) inset,
+          0 12px 40px rgba(0, 0, 0, 0.45),
+          0 0 68px rgba(255, 110, 40, 0.28);
+      }
+    }
+    @keyframes tron-glow-cyan {
+      0%, 100% {
+        box-shadow:
+          0 0 0 0.5px rgba(255, 255, 255, 0.3) inset,
+          0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
+          0 -12px 28px rgba(0, 0, 0, 0.2) inset,
+          0 12px 40px rgba(0, 0, 0, 0.45),
+          0 0 36px rgba(0, 212, 255, 0.1);
+      }
+      50% {
+        box-shadow:
+          0 0 0 0.5px rgba(255, 255, 255, 0.35) inset,
+          0 1px 0 0 rgba(255, 255, 255, 0.25) inset,
+          0 -12px 28px rgba(0, 0, 0, 0.2) inset,
+          0 12px 40px rgba(0, 0, 0, 0.45),
+          0 0 60px rgba(0, 212, 255, 0.24);
+      }
+    }
+    @keyframes tron-rim-shift {
+      0% { background-position: 0% 0%; }
+      100% { background-position: 100% 100%; }
+    }
+    @keyframes live-dot {
+      0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(59, 255, 111, 0.7); }
+      50% { opacity: 0.55; box-shadow: 0 0 12px rgba(59, 255, 111, 0.95); }
+    }
+    /*
+     * Lens: SVG displacement on backdrop only (Chrome). Never filter: on the
+     * panel — that warps type and kills board readability.
+     */
+    @supports ((-webkit-backdrop-filter: url(#lg-refract)) or (backdrop-filter: url(#lg-refract))) {
+      @media (prefers-reduced-motion: no-preference) {
+        .lg-lens {
+          -webkit-backdrop-filter: url(#lg-refract) blur(26px) saturate(1.8) brightness(1.12);
+          backdrop-filter: url(#lg-refract) blur(26px) saturate(1.8) brightness(1.12);
+        }
+      }
+    }
+
+    /* HUD corner brackets (Phase B) */
+    .tron-brackets {
+      position: absolute;
+      inset: 9px;
+      pointer-events: none;
+      z-index: 2;
+      border-radius: calc(var(--glass-radius) - 8px);
+      opacity: 0.9;
+      background:
+        linear-gradient(var(--tron-bracket, var(--tron-cyan)), var(--tron-bracket, var(--tron-cyan))) top left / 14px 1.5px no-repeat,
+        linear-gradient(var(--tron-bracket, var(--tron-cyan)), var(--tron-bracket, var(--tron-cyan))) top left / 1.5px 14px no-repeat,
+        linear-gradient(var(--tron-bracket, var(--tron-cyan)), var(--tron-bracket, var(--tron-cyan))) top right / 14px 1.5px no-repeat,
+        linear-gradient(var(--tron-bracket, var(--tron-cyan)), var(--tron-bracket, var(--tron-cyan))) top right / 1.5px 14px no-repeat,
+        linear-gradient(var(--tron-bracket, var(--tron-cyan)), var(--tron-bracket, var(--tron-cyan))) bottom left / 14px 1.5px no-repeat,
+        linear-gradient(var(--tron-bracket, var(--tron-cyan)), var(--tron-bracket, var(--tron-cyan))) bottom left / 1.5px 14px no-repeat,
+        linear-gradient(var(--tron-bracket, var(--tron-cyan)), var(--tron-bracket, var(--tron-cyan))) bottom right / 14px 1.5px no-repeat,
+        linear-gradient(var(--tron-bracket, var(--tron-cyan)), var(--tron-bracket, var(--tron-cyan))) bottom right / 1.5px 14px no-repeat;
+    }
+    .lg-org > .tron-brackets { --tron-bracket: var(--tron-org); }
+    .lg-cyan > .tron-brackets { --tron-bracket: var(--tron-cyan); }
+
+    /* FAB stack — thumb zone (large, readable glyphs) */
+    #fab-stack {
+      position: absolute; z-index: 15;
+      right: var(--safe-r);
+      bottom: var(--safe-b);
+      display: flex; flex-direction: column; gap: 14px;
+      pointer-events: none;
+    }
+    .fab {
+      width: var(--fab-size); height: var(--fab-size); border-radius: 999px;
+      pointer-events: auto; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+      font-size: 20px; font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--type-primary);
+      transition:
+        transform var(--ease-press),
+        box-shadow var(--ease-press),
+        filter var(--ease-press),
+        background 0.2s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .fab .fab-icon {
+      width: 28px; height: 28px; display: block;
+      stroke: currentColor; fill: none;
+      stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round;
+      pointer-events: none;
+      transition: filter var(--ease-press), transform var(--ease-press);
+    }
+    .fab:hover {
+      filter: brightness(1.1);
+    }
+    .fab:active {
+      transform: scale(0.9);
+      filter: brightness(1.28) saturate(1.15);
+    }
+    .fab:active .fab-icon {
+      filter: drop-shadow(0 0 6px currentColor);
+      transform: scale(1.06);
+    }
+    .fab[aria-pressed="true"] {
+      filter: brightness(1.14);
+      box-shadow:
+        0 0 0 0.5px rgba(255, 255, 255, 0.45) inset,
+        0 1px 0 rgba(255, 255, 255, 0.28) inset,
+        0 8px 28px rgba(0, 0, 0, 0.4),
+        0 0 32px rgba(0, 212, 255, 0.42) !important;
+    }
+    #fab-locate { color: #9ec5ff; }
+    #fab-lines {
+      font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+    }
+    #fab-lines .fab-icon { width: 26px; height: 26px; }
+    #fab-search { color: #e8f4ff; }
+
+    #nearest-chip, #loc-chip {
+      position: absolute; z-index: 15;
+      left: var(--safe-l); right: var(--safe-r);
+      top: max(72px, calc(env(safe-area-inset-top) + 56px));
+      display: none; pointer-events: auto;
+      padding: 12px 16px;
+      border-radius: var(--glass-radius-sm);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px; font-weight: 500;
+      letter-spacing: 0.01em;
+      color: #ffe0c2;
+      cursor: pointer;
+      text-align: left;
+    }
+    #nearest-chip.visible, #loc-chip.visible { display: block; }
+    #loc-chip {
+      color: var(--type-secondary); cursor: default;
+    }
+    #station-sheet.open ~ #nearest-chip {
+      top: calc(var(--safe-t) + min(68vh, 560px) + 10px);
+    }
+    /* Maps pattern: board owns thumb zone — fade FABs when open */
+    body:has(#station-sheet.open) #fab-stack {
+      opacity: 0.28;
+      pointer-events: none;
+      transform: translateY(6px);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    #fab-stack {
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    /* Station board — primary product panel */
+    #station-sheet {
+      position: absolute; z-index: 16;
+      left: var(--safe-l); right: var(--safe-r);
+      top: var(--safe-t);
+      max-height: min(72vh, 620px);
+      display: flex;
+      flex-direction: column;
+      transform: translateY(-18px) scale(0.96);
+      opacity: 0;
+      transition:
+        transform var(--ease-sheet),
+        opacity 0.28s ease,
+        filter 0.2s ease;
+      pointer-events: none;
+      border-radius: var(--glass-radius);
+      font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+      color: var(--type-primary);
+      padding: 12px 14px 16px;
+    }
+    #station-sheet.open {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #sheet-handle { display: none; }
+    /* [ ← ]  centered title/meta/as-of  [ ✕ ] — vertical center of stack vs buttons */
+    #sheet-header {
+      display: grid;
+      grid-template-columns: 44px 1fr 44px;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-shrink: 0;
+      min-height: 72px;
+    }
+    #sheet-heading {
+      text-align: center;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 2px 4px 0;
+    }
+    #sheet-title {
+      font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: #fff;
+      line-height: 1.15;
+    }
+    #sheet-meta {
+      font-size: 11px; letter-spacing: 0.12em; color: #ffb06a;
+      font-weight: 600; text-transform: uppercase;
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      line-height: 1.2;
+    }
+    #sheet-meta::before {
+      content: "";
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #3bff6f;
+      box-shadow: 0 0 8px rgba(59, 255, 111, 0.75);
+      flex-shrink: 0;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      #sheet-meta::before { animation: live-dot 1.8s ease-in-out infinite; }
+    }
+    #sheet-updated {
+      font-size: 11px; letter-spacing: 0.04em; color: var(--type-tertiary);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.2;
+    }
+    #sheet-back, #sheet-close {
+      border: none;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--type-primary);
+      font-family: inherit; font-size: 15px; font-weight: 500;
+      padding: 0; cursor: pointer;
+      min-height: 44px; min-width: 44px;
+      height: 44px; width: 44px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 0 0.5px rgba(255,255,255,0.2) inset;
+      transition: background var(--ease-press), transform var(--ease-press), box-shadow var(--ease-press);
+      justify-self: start;
+      align-self: center;
+    }
+    #sheet-close { justify-self: end; }
+    #sheet-back {
+      visibility: hidden;
+      pointer-events: none;
+      font-size: 18px;
+    }
+    #station-sheet.has-back #sheet-back {
+      visibility: visible;
+      pointer-events: auto;
+    }
+    #sheet-back:hover, #sheet-close:hover {
+      background: rgba(255,255,255,0.14);
+      box-shadow: 0 0 0 0.5px rgba(255,255,255,0.28) inset, 0 0 16px rgba(0, 212, 255, 0.15);
+    }
+    #sheet-back:active, #sheet-close:active {
+      background: rgba(255,255,255,0.2);
+      transform: scale(0.92);
+    }
+    #sheet-rows {
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
+      display: flex; flex-direction: column; gap: 0;
+      -webkit-overflow-scrolling: touch;
+      margin: 0 -4px; padding: 0 4px 4px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 12px), transparent);
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 12px), transparent);
+    }
+    #sheet-rows::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+    /* Direction sections — simple labels, no sticky frost */
+    .dir-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 4px;
+      padding-bottom: 12px;
+    }
+    .dir-section + .dir-section {
+      margin-top: 6px;
+      padding-top: 12px;
+      border-top: 0.5px solid rgba(255, 255, 255, 0.12);
+    }
+    .dir-header {
+      position: static;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 4px 4px 2px;
+      margin: 0;
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--type-secondary);
+      font-weight: 700;
+      background: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .dir-header .dir-count {
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+      color: var(--type-tertiary);
+      text-transform: none;
+    }
+    .dir-header.dir-midway { color: #ffc48a; }
+    .dir-header.dir-loop { color: #9edcff; }
+
+    /* Arrival row: orb | dest | clock + mins */
+    .arrival-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto auto;
+      align-items: center;
+      gap: 10px 12px;
+      min-height: 54px;
+      padding: 11px 14px;
+      border-radius: 16px;
+      background: rgba(8, 12, 24, 0.42);
+      box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12) inset;
+      backdrop-filter: blur(8px) saturate(1.2);
+      -webkit-backdrop-filter: blur(8px) saturate(1.2);
+      transition: background var(--ease-press), box-shadow var(--ease-press), transform var(--ease-press);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .arrival-row:active {
+      transform: scale(0.985);
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .arrival-row.delayed {
+      box-shadow: 0 0 0 0.5px rgba(255, 190, 60, 0.45) inset;
+      background: rgba(255, 180, 40, 0.1);
+    }
+    .arrival-row.approaching {
+      box-shadow: 0 0 0 0.5px rgba(80, 255, 160, 0.4) inset;
+      background: rgba(40, 220, 120, 0.1);
+    }
+    .arr-orb {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background:
+        radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.4) 0%, transparent 42%),
+        var(--cta-orange);
+      box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.32),
+        0 0 10px rgba(249, 70, 28, 0.45);
+    }
+    .arr-dest {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--type-primary);
+      letter-spacing: -0.015em;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .arr-clock {
+      font-size: 13px;
+      font-weight: 550;
+      color: var(--type-secondary);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.01em;
+      text-align: right;
+    }
+    .arr-mins {
+      font-size: var(--mins-size);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      min-width: 1.35em;
+      text-align: right;
+      text-shadow: 0 0 20px rgba(255, 255, 255, 0.25);
+    }
+    .arr-mins.due {
+      color: #6dffb0;
+      text-shadow:
+        0 0 12px rgba(80, 255, 160, 0.55),
+        0 0 28px rgba(0, 212, 255, 0.25);
+      font-size: 22px;
+      letter-spacing: 0.02em;
+    }
+    .sheet-empty {
+      padding: 28px 16px; text-align: center; color: var(--type-secondary);
+      letter-spacing: 0.08em; font-size: 13px; font-weight: 500;
+    }
+
+    /* Browse sheet — bottom liquid glass */
+    #browse-sheet {
+      position: absolute; z-index: 17;
+      left: var(--safe-l); right: var(--safe-r);
+      bottom: calc(var(--safe-b) + 84px);
+      max-height: 58vh;
+      transform: translateY(22px) scale(0.96);
+      opacity: 0;
+      transition:
+        transform var(--ease-sheet),
+        opacity 0.28s ease;
+      pointer-events: none;
+      border-radius: var(--glass-radius);
+      font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+      color: var(--type-primary);
+      display: flex; flex-direction: column;
+    }
+    #browse-sheet.open {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #browse-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 14px 10px;
+      border-bottom: 0.5px solid rgba(0, 212, 255, 0.18);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+    #browse-back, #browse-close {
+      border: none; border-radius: 999px;
+      background: rgba(255,255,255,0.1); color: var(--type-primary);
+      font-size: 14px; font-weight: 600;
+      min-height: 36px; min-width: 36px; padding: 0 10px; cursor: pointer;
+      font-family: inherit;
+      box-shadow: 0 0 0 0.5px rgba(255,255,255,0.15) inset;
+      transition: background var(--ease-press), transform var(--ease-press), box-shadow var(--ease-press);
+    }
+    #browse-back:active, #browse-close:active {
+      transform: scale(0.92);
+      background: rgba(255,255,255,0.18);
+    }
+    #browse-title {
+      flex: 1; font-size: 16px; font-weight: 700; letter-spacing: -0.01em;
+    }
+    #browse-kind {
+      display: flex;
+      gap: 0;
+      margin: 0 14px 8px;
+      padding: 3px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.28);
+      box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12) inset;
+    }
+    #browse-kind button {
+      flex: 1;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 650;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--type-secondary);
+      background: transparent;
+      cursor: pointer;
+      min-height: 40px;
+    }
+    #browse-kind button.active {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 0 0 0.5px rgba(0, 212, 255, 0.35) inset, 0 0 16px rgba(0, 212, 255, 0.12);
+    }
+    .bus-route-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 40px;
+      height: 36px;
+      padding: 0 8px;
+      border-radius: 10px;
+      background: rgba(80, 140, 220, 0.35);
+      color: #d6e8ff;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 0.5px rgba(120, 180, 255, 0.4) inset;
+    }
+    .bus-route-badge-sm {
+      min-width: 32px;
+      height: 28px;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+    .arr-orb-bus {
+      background:
+        radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.35) 0%, transparent 42%),
+        rgb(90, 150, 230) !important;
+    }
+    /* Station search hides Train|Bus; bus route filter keeps the toggle. */
+    #browse-sheet.mode-search:not(.mode-bus-list) #browse-kind { display: none; }
+    #browse-search-input {
+      display: none; width: calc(100% - 28px); margin: 10px 14px 6px;
+      padding: 13px 16px; border-radius: 14px;
+      border: none;
+      background: rgba(0,0,0,0.28);
+      color: #fff;
+      font-size: 16px; font-family: inherit; font-weight: 500;
+      box-shadow: 0 0 0 0.5px rgba(255,255,255,0.14) inset;
+      outline: none;
+    }
+    #browse-search-input:focus {
+      box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.45) inset;
+    }
+    #browse-search-input::placeholder { color: var(--type-tertiary); }
+    #browse-sheet.mode-search #browse-search-input { display: block; }
+    #browse-sheet.mode-bus-list #browse-search-input { display: block; }
+    #browse-list {
+      overflow-y: auto; -webkit-overflow-scrolling: touch;
+      padding: 6px 10px 14px; flex: 1;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 16px), transparent);
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 16px), transparent);
+    }
+    #browse-list::-webkit-scrollbar { display: none; width: 0; height: 0; }
+    .browse-row {
+      display: flex; align-items: center; gap: 12px;
+      width: 100%; text-align: left;
+      padding: 13px 12px; border: none; border-radius: 14px;
+      background: transparent; color: var(--type-primary);
+      font-size: 15px; font-weight: 550; font-family: inherit; cursor: pointer;
+      min-height: 52px;
+      transition: background var(--ease-press), box-shadow var(--ease-press), transform var(--ease-press);
+    }
+    .browse-row:hover {
+      background: rgba(255,255,255,0.08);
+    }
+    .browse-row:active {
+      background: rgba(0, 212, 255, 0.1);
+      box-shadow: inset 2px 0 0 0 var(--tron-cyan);
+      transform: scale(0.99);
+    }
+    .browse-row:disabled { opacity: 0.38; cursor: not-allowed; }
+    .browse-swatch {
+      width: 12px; height: 32px; border-radius: 6px; flex-shrink: 0;
+      box-shadow: 0 0 12px color-mix(in srgb, currentColor 55%, transparent);
+    }
+    /* CTA-style multi-line orbs on station rows */
+    .line-orbs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      min-width: 22px;
+    }
+    .line-orb {
+      width: 11px;
+      height: 28px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      box-shadow: 0 0 8px color-mix(in srgb, currentColor 40%, transparent);
+    }
+    .line-orb-more {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--type-tertiary);
+      letter-spacing: 0.02em;
+    }
+    .browse-name {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .line-block {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .line-block:last-child { margin-bottom: 0; }
+    .line-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 4px 2px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--type-primary);
+    }
+    .line-header-orb {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.25);
+    }
+    .line-header-name { letter-spacing: 0.12em; }
+    .browse-row .meta {
+      margin-left: auto; font-size: 11px; letter-spacing: 0.06em;
+      color: var(--type-secondary); font-weight: 600;
+    }
+    .browse-chevron {
+      color: var(--type-tertiary); font-size: 18px; font-weight: 300;
+    }
+
+    @media (min-width: 900px) {
+      #station-sheet {
+        left: 18px; right: auto; width: 400px; max-height: min(70vh, 640px);
+      }
+      #browse-sheet {
+        left: 18px; right: auto; width: 380px; bottom: 28px; max-height: 62vh;
+      }
+      #nearest-chip, #loc-chip {
+        left: 18px; right: auto; width: auto; max-width: 360px;
+      }
+      #station-sheet.open ~ #nearest-chip {
+        top: auto; bottom: 28px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #station-sheet, #browse-sheet, .fab {
+        transition: opacity 0.15s ease;
+      }
+      .lg-org, .lg-cyan:not(.fab),
+      .lg-org::after, .lg-cyan::after,
+      #sheet-meta::before {
+        animation: none !important;
+      }
+      .lg-lens {
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright)) !important;
+        backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright)) !important;
+      }
     }
 
     /* CRT overlays */
@@ -58,12 +1082,138 @@
   </style>
 </head>
 <body>
+  <!-- Liquid Glass refraction (mild). Used by .lg-lens via backdrop-filter. -->
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <defs>
+      <filter id="lg-refract" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves="2" seed="7" result="noise" />
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="12" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </defs>
+  </svg>
   <div id="map"></div>
   <div id="scanlines"></div>
   <div id="vignette"></div>
-  <div class="hud" id="wordmark">CHI-TRON<small>CHICAGO TRANSIT GRID</small></div>
+  <div class="hud" id="wordmark">CHI-TRON<small>ORANGE LIVE</small></div>
   <div class="hud" id="clock">--:--:--</div>
   <div class="hud" id="status">BOOT</div>
+  <div class="hud" id="bus-status">BUS BOOT</div>
+  <div class="hud" id="fps">-- FPS</div>
+
+  <!-- U12: instrument sidebar. Row content (line rows + display toggles) is
+       built by src/hud.js — this is just the docked glass shell. -->
+  <div class="hud" id="sidebar">
+    <!-- MODE hidden this pass — always aesthetic sim (LIVE dormant). -->
+    <div class="panel-section" id="mode-section" style="display:none" aria-hidden="true">
+      <div id="mode-rows" role="group" aria-label="Explore or Live mode"></div>
+      <div id="mode-fallback-note">LIVE UNAVAILABLE — FELL BACK TO EXPLORE</div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">
+        <span class="panel-title">LINES</span>
+        <span class="panel-scope">IN SERVICE</span>
+      </div>
+      <div id="line-rows" role="group" aria-label="L line visibility toggles"></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">
+        <span class="panel-title">DISPLAY</span>
+      </div>
+      <div id="display-rows" role="group" aria-label="Display layer toggles"></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">
+        <span class="panel-title">CAMERA</span>
+      </div>
+      <div id="camera-rows" role="group" aria-label="Camera presets"></div>
+    </div>
+    <!-- U15 (R12): disruption reads as light on the map itself; this block
+         is the text fallback for what's actually wrong, line by line. -->
+    <div class="panel-section">
+      <div class="panel-header">
+        <span class="panel-title">SYSTEM STATUS</span>
+      </div>
+      <div id="status-rows" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- U17 (R14): click-to-follow indicator. Content/visibility owned by src/hud.js. -->
+  <div class="hud" id="follow-indicator">
+    <span class="follow-tag">FOLLOWING</span>
+    <span id="follow-label"></span>
+    <button id="follow-release" type="button">RELEASE (ESC)</button>
+  </div>
+
+  <!-- U12: top-right telemetry (live in-viewport train count) + compass. -->
+  <div class="hud" id="telemetry">
+    <span class="telemetry-label">TRAINS &middot; IN VIEW</span>
+    <span class="telemetry-count" id="telemetry-count">--</span>
+  </div>
+  <div class="hud" id="compass" aria-hidden="true">
+    <svg viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="18" />
+      <g id="compass-rose">
+        <path d="M20 5 L23.5 20 L20 35 L16.5 20 Z" />
+        <text x="20" y="9">N</text>
+      </g>
+    </svg>
+  </div>
+
+  <div id="fab-stack">
+    <button type="button" class="fab lg lg-cyan" id="fab-search" title="Search stations" aria-label="Search stations">
+      <svg class="fab-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="6.5" />
+        <path d="M16.2 16.2 L20.5 20.5" />
+      </svg>
+    </button>
+    <button type="button" class="fab lg lg-cyan" id="fab-lines" title="Lines" aria-label="Browse lines">
+      <svg class="fab-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 7.5 H19" />
+        <path d="M5 12 H19" />
+        <path d="M5 16.5 H14" />
+      </svg>
+    </button>
+    <button type="button" class="fab lg lg-cyan" id="fab-locate" title="My location" aria-label="Center on my location">
+      <svg class="fab-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="3.2" />
+        <circle cx="12" cy="12" r="7.5" />
+        <path d="M12 2.5 V5.2 M12 18.8 V21.5 M2.5 12 H5.2 M18.8 12 H21.5" />
+      </svg>
+    </button>
+  </div>
+  <div class="hud lg lg-cyan" id="loc-chip">LOCATION OFF</div>
+  <button type="button" class="hud lg lg-org" id="nearest-chip" aria-live="polite"></button>
+
+  <div id="station-sheet" class="lg lg-org lg-lens" role="dialog" aria-label="Station arrivals">
+    <span class="tron-brackets" aria-hidden="true"></span>
+    <div id="sheet-handle" aria-hidden="true"></div>
+    <div id="sheet-header">
+      <button type="button" id="sheet-back" aria-label="Back to station list">←</button>
+      <div id="sheet-heading">
+        <div id="sheet-title">Station</div>
+        <div id="sheet-meta">ORANGE</div>
+        <div id="sheet-updated">—</div>
+      </div>
+      <button type="button" id="sheet-close" aria-label="Close">✕</button>
+    </div>
+    <div id="sheet-rows" aria-live="polite"></div>
+  </div>
+
+  <div id="browse-sheet" class="lg lg-cyan lg-lens" role="dialog" aria-label="Browse">
+    <span class="tron-brackets" aria-hidden="true"></span>
+    <div id="browse-header">
+      <button type="button" id="browse-back" aria-label="Back" hidden>←</button>
+      <div id="browse-title">Lines</div>
+      <button type="button" id="browse-close" aria-label="Close">✕</button>
+    </div>
+    <div id="browse-kind" role="group" aria-label="Train or bus">
+      <button type="button" id="browse-kind-train" class="active" aria-pressed="true">Train</button>
+      <button type="button" id="browse-kind-bus" aria-pressed="false">Bus</button>
+    </div>
+    <input id="browse-search-input" type="search" placeholder="Station name…" enterkeyhint="search" autocomplete="off" />
+    <div id="browse-list"></div>
+  </div>
+
   <div class="hud" id="disclaimer">UNOFFICIAL FAN PROJECT — NOT AFFILIATED WITH CTA</div>
   <script type="module" src="/src/main.js"></script>
 </body>

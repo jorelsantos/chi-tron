@@ -1,36 +1,68 @@
 # CHI-TRON
 
-A real-time map of the Chicago L as a Tron grid — live CTA trains rendered as
-glowing light-cycles pulling neon trails over a dark 3D city. Blade Runner /
-Cyberpunk Edgerunners aesthetic, Mini Tokyo 3D lineage.
+**Live nav for Chicago transit** — neon map, real trains, you in the world.
+
+Live **all eight L lines**: vehicle positions, single-line arrival boards
+(CTA Train Tracker), multi-line orbs at transfer stops, blue-dot for walking.
 
 **Unofficial fan project — not affiliated with the Chicago Transit Authority.**
 
 ## How it works
 
-- **Live data:** CTA Train Tracker API (`ttpositions.aspx`), polled every 5s
-  through a Vite dev proxy that injects the API key server-side (the key never
-  reaches client code).
-- **Motion:** each train is snapped to its line's real track geometry (from CTA
-  static GTFS `shapes.txt`) and tweened between position reports — continuous
-  glide, honest positions.
-- **Rendering:** MapLibre GL (custom dark style on keyless OpenFreeMap vector
-  tiles, 3D building extrusions) + deck.gl `TripsLayer` for the fading trails.
+- **Map first:** full-bleed Grid-in-the-Fog stage; chrome floats on top.
+- **Live trains:** CTA `ttpositions` for all lines in `LINE_DEFS` (`src/catalog.js`) — **one** multi-`rt` poll (~5s), not one poll per line.
+- **Station board:** open a stop from a **line** list → arrivals for **that line only** (Orange → Roosevelt = Orange; Red → Roosevelt = Red). List orbs show which lines serve the stop.
+- **Browse:** Lines → stations (CTA-style multi-color orbs) → board; search across the system.
+- **You:** ◎ FAB enables geolocation; follow-me recenters; pan breaks follow (Maps law).
+- **Buses (full tracker):** All ~126 CTA routes — Train|Bus → search route → **direction** → stops → predictions. Map vehicles only for **mapLive** marquee (~21 high-frequency routes) so poll budget and density stay sane.
+- **Bake:** `npm run patterns` → `patterns.json` (map polylines + all `routeDirections`) + `bus-routes.json` (catalog).
+
+### Poll budget (approx)
+
+| Feed | Cadence | Notes |
+|---|---|---|
+| Train positions | 5s | 1 request with all live `rt` codes |
+| Bus vehicles | 15s | mapLive only (~21 rts, chunked 10/call) |
+| Train / bus boards | 20s | Only while a sheet is open |
+| Ceiling | 25k/day | Separate ledgers `cta-train` / `cta-bus` |
 
 ## Setup
 
 ```bash
 npm install
-node scripts/build-tracks.mjs   # one-time: downloads CTA GTFS → tracks.json
-echo "CTA_KEY=your-key-here" > .env
+# .env already needs:
+# CTA_KEY=...          # Train Tracker (positions + arrivals)
+# CTA_BUS_KEY=...      # Bus Tracker
+npm run patterns       # rebuild bus catalog + directions (needs CTA_BUS_KEY)
+npm run buildings      # optional downtown mass
 npm run dev
 ```
 
-Get a free API key at the [CTA developer center](https://www.transitchicago.com/developers/traintrackerapply/).
+Open http://localhost:5173/ — allow location when you want the blue dot.
 
-No key? `http://localhost:5173/?mock=1` runs synthetic trains on the real tracks.
+## Controls
 
-## Stretch layers (not built)
+| Action | Effect |
+|---|---|
+| Tap station (from a line list) | Open that line’s arrival sheet |
+| ◎ FAB | Enable GPS + recenter on me |
+| Pan map | Breaks follow-me |
+| Esc | Close sheet / release train follow |
+| Tap train tip | Follow that run |
 
-Deploy (GitHub Pages + key-proxy worker), CTA buses, Metra, Divvy, O'Hare/Midway
-air traffic, sound design.
+## Stack
+
+MapLibre + deck.gl + OpenFreeMap · CTA Train Tracker · Vite key proxy (dev) · Vercel `api/` proxy (prod).
+
+## Deploy (public URL)
+
+```bash
+# vercel env add CTA_KEY
+vercel --prod
+```
+
+`api/tt.js` + `api/arrivals.js` + `api/bus/[...path].js` inject keys server-side. Never put keys in the client bundle.
+
+## Stretch
+
+Tracker-first shell · focus-route map poll · Divvy · PWA.
