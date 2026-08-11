@@ -5,6 +5,26 @@ import { defineConfig, loadEnv } from 'vite';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
+    build: {
+      rollupOptions: {
+        output: {
+          // The two rendering stacks are large, stable, and versioned in
+          // package.json — splitting them out of the app chunk means a
+          // product change ships a small file and leaves ~1.5 MB of vendor
+          // code in the browser cache untouched. Without this everything
+          // landed in one ~1.76 MB bundle that every deploy invalidated.
+          manualChunks: {
+            maplibre: ['maplibre-gl'],
+            deck: [
+              '@deck.gl/core',
+              '@deck.gl/layers',
+              '@deck.gl/geo-layers',
+              '@deck.gl/mapbox',
+            ],
+          },
+        },
+      },
+    },
     server: {
       proxy: {
         // NOTE: keep this path as exact `/api/tt` only — do NOT name arrivals

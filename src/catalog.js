@@ -115,7 +115,9 @@ export function searchStations(stationList, query, limit = 12) {
   for (const s of stationList || []) {
     const name = String(s.name || '').toLowerCase();
     const id = String(s.id || '');
-    let score = 0;
+    // No initializer: every path below either assigns a score or skips the
+    // station outright, so a starting value would only ever be overwritten.
+    let score;
     if (name.startsWith(q)) score = 100 - name.length;
     else if (name.includes(q)) score = 50 - name.indexOf(q);
     else if (id.includes(q)) score = 10;

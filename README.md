@@ -17,6 +17,30 @@ Live **all eight L lines**: vehicle positions, single-line arrival boards
 - **Buses (full tracker):** All ~126 CTA routes — Train|Bus → search route → **direction** → stops → predictions. Map vehicles only for **mapLive** marquee (~21 high-frequency routes) so poll budget and density stay sane.
 - **Bake:** `npm run patterns` → `patterns.json` (map polylines + all `routeDirections`) + `bus-routes.json` (catalog).
 
+### Cold open
+
+The map paints as soon as `tracks.json` lands. `stations.json` and the ~3.2 MB
+bus bake (`patterns.json`) load after, so bus geometry never blocks first paint
+— see `src/bus-data.js`. Vendor code is split into `maplibre` and `deck` chunks,
+so a product change ships ~22 kB gzip instead of invalidating the whole bundle.
+
+### Proxy protection
+
+This repo is public and `api/` injects the CTA keys server-side, so the proxies
+are guarded (`api/_guard.js`): same-origin only, per-IP rate limit, and a
+per-instance daily budget under the CTA ceiling. The bus catch-all also takes an
+exact-match method allowlist (`getvehicles`, `getpredictions`), which is what
+stops `..` traversal out of `/bustime/api/v3/`.
+
+The guard needs no configuration on Vercel — it authorizes the request's own
+host, so preview deployments work automatically. Set `ALLOWED_ORIGINS`
+(comma-separated) only when a different domain must reach the proxies.
+
+The rate limit and daily budget live in instance memory, so they are per warm
+serverless instance, not global. That bounds one instance's spend and makes
+casual scraping expensive; move both counters to Vercel KV if you ever need an
+exact distributed quota.
+
 ### Poll budget (approx)
 
 | Feed | Cadence | Notes |

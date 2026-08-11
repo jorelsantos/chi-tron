@@ -6,7 +6,6 @@
 // tick() returns plain {id, pos, heading} objects src/layers.js treats the
 // same way it treats trains and buses.
 
-import { now } from './trains.js';
 import { M_PER_DEG_LAT, mPerDegLon, bearingDeg, interpAtDist } from './tracks.js';
 
 // KTD9 / the High-Level Technical Design's pseudo-code: "a global clock

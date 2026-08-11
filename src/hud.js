@@ -194,6 +194,21 @@ export function createHud({
     displayRowsEl?.appendChild(btn);
     displayButtons.set(key, btn);
   }
+  /**
+   * Re-stamp every DISPLAY toggle from the current `display` flags.
+   *
+   * The buttons above read `display` once, when they are built. That was
+   * safe while every flag's value was known at boot, but the bus flag now
+   * flips later — the bus bake is lazy (src/bus-data.js), so BUSES starts
+   * off and turns on when the data lands. Without this the flag and the
+   * button it draws would disagree.
+   */
+  function syncDisplayButtons() {
+    for (const [key, btn] of displayButtons) {
+      btn.setAttribute('aria-pressed', String(!!display[key]));
+    }
+  }
+
   // Reapply buildings visibility if the style reloads (CARTO fallback ships
   // its own building layers under different ids, so this is a no-op there —
   // guarded by the getLayer() check in setBuildingsVisible).
@@ -371,6 +386,7 @@ export function createHud({
     applyLineFilters,
     setBuildingsVisible,
     setBuildingLayerIds,
+    syncDisplayButtons,
     refreshSystemStatus,
     setMode,
     flashFallbackNote,
