@@ -149,7 +149,10 @@ export function createBrowse({
         browseRow({
           lead: colorSwatch(line.color),
           name: line.name,
-          meta: 'LIVE',
+          // No meta label here. Every line in this list is live, so a 'LIVE'
+          // badge on all 8 rows carried no information — it was decoration
+          // that read as status. The bus list keeps its badge because there
+          // it varies: MAP means the route also draws vehicles on the map.
           chevron: true,
           onClick: () => {
             lineKey = line.key;
