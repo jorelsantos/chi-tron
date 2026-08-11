@@ -215,7 +215,7 @@ export function isAllowedBusMethod(method) {
  * @param {any} res
  * @returns {boolean} true when the caller should proceed to fetch upstream.
  */
-export function guardRequest(req, res) {
+export function guardRequest(req, res, { metered = true } = {}) {
   if (req.method && req.method !== 'GET' && req.method !== 'HEAD') {
     res.status(405).json({ error: 'method not allowed' });
     return false;
@@ -230,7 +230,12 @@ export function guardRequest(req, res) {
     res.status(429).json({ error: 'rate limited' });
     return false;
   }
-  if (!budget.consume()) {
+  // Keyless upstreams (CTA's Customer Alerts API) pass metered:false. They
+  // still need the origin and rate-limit layers, because this function is
+  // ours and should not become a general-purpose relay. They must not draw
+  // down the daily budget, though — that budget exists to protect the two
+  // keyed feeds, and a 2-minute alerts poll would eat it for no reason.
+  if (metered && !budget.consume()) {
     res.status(503).json({ error: 'daily budget reached' });
     return false;
   }

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { guardRequest } from './_guard.js';
 import busHandler from './bus/[...path].js';
 import ttHandler from './tt.js';
+import alertsHandler, { isAllowedAlertEndpoint } from './alerts/[...path].js';
 
 /** Minimal Vercel-style res double that records what the handler wrote. */
 function mockRes() {
@@ -160,6 +161,64 @@ describe('bus proxy handler', () => {
     await busHandler(req, res);
     expect(res.statusCode).toBe(403);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('alerts proxy handler', () => {
+  it('allows exactly the two endpoints src/alerts.js calls', () => {
+    expect(isAllowedAlertEndpoint('routes.aspx')).toBe(true);
+    expect(isAllowedAlertEndpoint('alerts.aspx')).toBe(true);
+    expect(isAllowedAlertEndpoint('../../etc')).toBe(false);
+    expect(isAllowedAlertEndpoint('')).toBe(false);
+  });
+
+  it('forwards a nested path — the flat-file routing trap this replaces', async () => {
+    const res = mockRes();
+    await alertsHandler(
+      browserReq({
+        url: '/api/alerts/routes.aspx?type=rail&outputType=JSON',
+        query: { path: 'routes.aspx', type: 'rail' },
+      }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    const target = fetchSpy.mock.calls[0][0];
+    expect(target).toContain('/api/1.0/routes.aspx');
+    expect(target).toContain('type=rail');
+  });
+
+  it('never leaks the dynamic-route path param upstream', async () => {
+    const res = mockRes();
+    await alertsHandler(
+      browserReq({ url: '/api/alerts/alerts.aspx', query: { path: 'alerts.aspx' } }),
+      res,
+    );
+    expect(fetchSpy.mock.calls[0][0]).not.toContain('path=');
+  });
+
+  it('rejects an endpoint outside the allowlist', async () => {
+    const res = mockRes();
+    await alertsHandler(browserReq({ url: '/api/alerts/x', query: { path: 'x' } }), res);
+    expect(res.statusCode).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('still refuses a caller that is not our page', async () => {
+    const req = browserReq({ url: '/api/alerts/routes.aspx', query: { path: 'routes.aspx' } });
+    delete req.headers.referer;
+    const res = mockRes();
+    await alertsHandler(req, res);
+    expect(res.statusCode).toBe(403);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('sets a shared cache header so one poll serves every viewer', async () => {
+    const res = mockRes();
+    await alertsHandler(
+      browserReq({ url: '/api/alerts/routes.aspx', query: { path: 'routes.aspx' } }),
+      res,
+    );
+    expect(res.headers['cache-control']).toContain('s-maxage=60');
   });
 });
 

@@ -7,6 +7,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>CHI-TRON</title>
+  <!-- Browsers request /favicon.ico unprompted when no icon is declared.
+       Nothing was declared and no file existed, so every page load logged a
+       404 — the only console error on the site. Declaring an icon stops the
+       implicit request entirely. -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -754,11 +760,16 @@
       min-height: 0;
       display: flex; flex-direction: column; gap: 0;
       -webkit-overflow-scrolling: touch;
-      margin: 0 -4px; padding: 0 4px 4px;
+      /* A scrolling list always cuts its last visible row. The bottom fade is
+         what tells you the cut means "more below" rather than "broken". At
+         12px it was too short to read as a fade, so a half-row simply looked
+         sliced off by the sheet's rounded corner. 30px reads as intent, and
+         the extra bottom padding lets the final row scroll clear of it. */
+      margin: 0 -4px; padding: 0 4px 14px;
       scrollbar-width: none;
       -ms-overflow-style: none;
-      mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 12px), transparent);
-      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 12px), transparent);
+      mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 30px), transparent);
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 30px), transparent);
     }
     #sheet-rows::-webkit-scrollbar { display: none; width: 0; height: 0; }
 

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Two crossing lines on the app's near-black ground: the CTA orange and
+       Tron cyan already used throughout index.html. Kept to two strokes and
+       one dot so it stays legible at 16px in a browser tab. -->
+  <rect width="32" height="32" rx="7" fill="#05070c"/>
+  <g stroke-linecap="round" fill="none">
+    <path d="M4 20 H28" stroke="#00d4ff" stroke-width="3" opacity="0.9"/>
+    <path d="M12 4 V28" stroke="#f9461c" stroke-width="3"/>
+  </g>
+  <circle cx="12" cy="20" r="4.2" fill="#f9461c"/>
+  <circle cx="12" cy="20" r="1.7" fill="#ffffff" opacity="0.92"/>
+</svg>
