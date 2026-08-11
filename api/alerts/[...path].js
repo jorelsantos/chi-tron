@@ -14,7 +14,7 @@
 // endpoints are keyless per CTA's developer docs. The guard still runs, minus
 // the daily budget. See the metered flag in api/_guard.js.
 
-import { guardRequest } from '../_guard.js';
+import { guardRequest, isRouteParam } from '../_guard.js';
 
 const UPSTREAM = 'https://lapi.transitchicago.com/api/1.0';
 
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
     }
     const target = new URL(`${UPSTREAM}/${sub.toLowerCase()}`);
     incoming.searchParams.forEach((v, k) => {
-      if (k === 'path') return;
+      if (isRouteParam(k)) return;
       target.searchParams.set(k, v);
     });
     const upstream = await fetch(target.toString());

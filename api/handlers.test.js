@@ -187,13 +187,37 @@ describe('alerts proxy handler', () => {
     expect(target).toContain('type=rail');
   });
 
-  it('never leaks the dynamic-route path param upstream', async () => {
+  // Regression: this shipped broken. Vercel rewrites a catch-all request and
+  // appends the matched segment to the query string as `...path` — with the
+  // dots. The handler skipped the literal 'path', so `...path` reached CTA,
+  // which answered `Invalid parameter: '...path'`. The original test used a
+  // hand-written URL with no such param, so it passed while production failed.
+  // These two use the URL shape Vercel actually produces.
+  it('strips the ...path param Vercel appends for a catch-all route', async () => {
     const res = mockRes();
     await alertsHandler(
-      browserReq({ url: '/api/alerts/alerts.aspx', query: { path: 'alerts.aspx' } }),
+      browserReq({
+        url: '/api/alerts/routes.aspx?type=rail&...path=routes.aspx',
+        query: { '...path': 'routes.aspx', type: 'rail' },
+      }),
       res,
     );
-    expect(fetchSpy.mock.calls[0][0]).not.toContain('path=');
+    const target = fetchSpy.mock.calls[0][0];
+    expect(target).not.toContain('path');
+    expect(target).toContain('type=rail');
+  });
+
+  it('resolves the endpoint from the ...path query key', async () => {
+    const res = mockRes();
+    await alertsHandler(
+      browserReq({
+        url: '/api/alerts/alerts.aspx?...path=alerts.aspx',
+        query: { '...path': 'alerts.aspx' },
+      }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(fetchSpy.mock.calls[0][0]).toContain('/api/1.0/alerts.aspx');
   });
 
   it('rejects an endpoint outside the allowlist', async () => {

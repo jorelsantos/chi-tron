@@ -188,6 +188,27 @@ const limiter = createRateLimiter();
 const budget = createDailyBudget();
 
 /**
+ * True for the query parameter Vercel adds to describe a catch-all route's
+ * matched segment.
+ *
+ * This exists because of a production bug. Vercel rewrites
+ * `/api/alerts/routes.aspx` internally and appends the matched segment to the
+ * query string — named `...path` for a `[...path].js` file, dots included,
+ * not `path`. Both proxies skipped the literal `'path'`, so the real
+ * parameter sailed through to the upstream API. CTA's Bus Tracker ignores
+ * unknown parameters and hid the bug; CTA's Alerts API validates them and
+ * answered `Invalid parameter: '...path'`.
+ *
+ * Matching on the suffix covers a rename of the file's `[...x]` slug too.
+ *
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function isRouteParam(key) {
+  return key === 'path' || /^\.{3}/.test(key);
+}
+
+/**
  * Bus Tracker v3 methods the client is allowed to reach. Only these two are
  * called from the browser (src/buses.js, src/bus-arrivals.js); the catalog
  * bake in scripts/build-patterns.mjs talks to CTA directly with its own key
