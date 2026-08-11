@@ -1,8 +1,8 @@
 /**
- * The browse surface: Train | Bus → lines/routes → (direction) → stops →
- * board, plus station search.
+ * The browse surface: Train | Bus | Bike → lines/routes/stations → board,
+ * plus station search.
  *
- * Two things worth knowing before editing:
+ * Three things worth knowing before editing:
  *
  * 1. Bus stop order comes from the baked pattern sequence, never from CTA's
  *    `getstops`, which returns stops sorted by name and is therefore useless
@@ -10,6 +10,7 @@
  * 2. Bus data is lazy (src/bus-data.js). Any bus view may render before the
  *    bake has landed, so each one asks for it and paints a loading state
  *    until `onChange` re-renders it. Train views never wait on anything.
+ * 3. Bike is shallower: a flat searchable station list. No direction step.
  */
 
 import {
@@ -33,16 +34,24 @@ import { browseRow, colorSwatch, routeBadge, lineOrbs, showEmpty } from './dom.j
  * @param {object} deps
  * @param {() => Record<string, object>} deps.getStations snapped station index
  * @param {import('./bus-data.js').BusData} deps.busData
+ * @param {() => import('./divvy.js').DivvyLive[]} [deps.getBikeStations]
+ * @param {() => boolean} [deps.bikeReady]
+ * @param {() => void} [deps.ensureBikeData]
  * @param {(station: object, opts: object) => void} deps.onOpenStation
  * @param {(stop: object, opts: object) => void} deps.onOpenBusStop
+ * @param {(station: object, opts?: object) => void} [deps.onOpenBikeStation]
  * @param {() => boolean} deps.isBoardOpen
  * @param {() => void} deps.closeBoard
  */
 export function createBrowse({
   getStations,
   busData,
+  getBikeStations = () => [],
+  bikeReady = () => false,
+  ensureBikeData = () => {},
   onOpenStation,
   onOpenBusStop,
+  onOpenBikeStation = () => {},
   isBoardOpen,
   closeBoard,
 }) {
@@ -52,7 +61,7 @@ export function createBrowse({
   const browseBack = document.getElementById('browse-back');
   const searchInput = document.getElementById('browse-search-input');
 
-  /** @type {'train'|'bus'} */
+  /** @type {'train'|'bus'|'bike'} */
   let kind = 'train';
   /** @type {'lines'|'directions'|'stations'|'search'} */
   let mode = 'lines';
@@ -61,6 +70,7 @@ export function createBrowse({
   /** @type {string} CTA rtdir, e.g. Northbound */
   let busRtdir = '';
   let busQuery = '';
+  let bikeQuery = '';
 
   const isOpen = () => Boolean(browseEl?.classList.contains('open'));
 
@@ -76,6 +86,7 @@ export function createBrowse({
     for (const [id, active] of [
       ['browse-kind-train', kind === 'train'],
       ['browse-kind-bus', kind === 'bus'],
+      ['browse-kind-bike', kind === 'bike'],
     ]) {
       const el = document.getElementById(id);
       el?.classList.toggle('active', active);
@@ -163,12 +174,56 @@ export function createBrowse({
     );
   }
 
+  function renderBikeStations() {
+    browseEl?.classList.add('mode-bike-list');
+    browseEl?.classList.remove('mode-search');
+    browseEl?.classList.remove('mode-bus-list');
+    if (searchInput) {
+      searchInput.placeholder = 'Station name…';
+      searchInput.value = bikeQuery;
+    }
+    setTitle('Bike stations');
+    if (!bikeReady()) {
+      showEmpty(browseList, 'LOADING…');
+      ensureBikeData();
+      return;
+    }
+    const q = bikeQuery.trim().toLowerCase();
+    let list = getBikeStations();
+    if (q) {
+      list = list.filter((s) => String(s.name || '').toLowerCase().includes(q));
+    }
+    // Stable A–Z when no live order matters.
+    list = [...list].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    if (!list.length) {
+      showEmpty(browseList, q ? 'NO MATCH' : 'NO STATIONS');
+      return;
+    }
+    // Cap list length for DOM budget; search narrows.
+    const shown = list.slice(0, 200);
+    browseList.replaceChildren(
+      ...shown.map((st) => {
+        const bikes = (st.classic || 0) + (st.ebikes || 0);
+        const meta = st.renting === false
+          ? 'NOT RENTING'
+          : `${bikes} BIKES · ${st.docks ?? '—'} DOCKS`;
+        return browseRow({
+          name: st.name || st.id,
+          meta,
+          chevron: true,
+          onClick: () => onOpenBikeStation(st, { source: 'stations' }),
+        });
+      }),
+    );
+  }
+
   function renderLines() {
     if (!browseList) return;
     mode = 'lines';
     setBack(false);
     browseList.replaceChildren();
     if (kind === 'bus') renderBusRoutes();
+    else if (kind === 'bike') renderBikeStations();
     else renderTrainLines();
   }
 
@@ -303,10 +358,12 @@ export function createBrowse({
     browseEl?.classList.remove('open');
     browseEl?.classList.remove('mode-search');
     browseEl?.classList.remove('mode-bus-list');
+    browseEl?.classList.remove('mode-bike-list');
     document.getElementById('fab-lines')?.setAttribute('aria-pressed', 'false');
     document.getElementById('fab-search')?.setAttribute('aria-pressed', 'false');
     if (searchInput) searchInput.value = '';
     busQuery = '';
+    bikeQuery = '';
   }
 
   /** @param {'lines'|'directions'|'stations'|'search'} [nextMode] */
@@ -316,8 +373,10 @@ export function createBrowse({
     mode = nextMode;
     browseEl?.classList.add('open');
     const showBusSearch = kind === 'bus' && nextMode === 'lines';
+    const showBikeSearch = kind === 'bike' && nextMode === 'lines';
     browseEl?.classList.toggle('mode-search', nextMode === 'search' && kind === 'train');
     browseEl?.classList.toggle('mode-bus-list', showBusSearch);
+    browseEl?.classList.toggle('mode-bike-list', showBikeSearch);
     document.getElementById('fab-lines')?.setAttribute('aria-pressed', String(nextMode !== 'search'));
     document.getElementById('fab-search')?.setAttribute('aria-pressed', String(nextMode === 'search'));
     syncKindUi();
@@ -327,6 +386,7 @@ export function createBrowse({
       renderBusDirections(busRt);
     } else if (nextMode === 'stations') {
       if (kind === 'bus') renderBusStops(busRt, busRtdir);
+      else if (kind === 'bike') renderBikeStations();
       else renderStations(lineKey);
     } else {
       kind = 'train';
@@ -334,7 +394,7 @@ export function createBrowse({
       if (searchInput) searchInput.placeholder = 'Station name…';
       renderSearch('');
     }
-    if (nextMode === 'search' || showBusSearch) searchInput?.focus();
+    if (nextMode === 'search' || showBusSearch || showBikeSearch) searchInput?.focus();
   }
 
   /**
@@ -347,6 +407,11 @@ export function createBrowse({
       busRt = nav.busRt || busRt;
       busRtdir = nav.busRtdir || busRtdir;
       open('stations');
+      return;
+    }
+    if (nav.kind === 'bike') {
+      kind = 'bike';
+      open('lines');
       return;
     }
     kind = 'train';
@@ -370,6 +435,12 @@ export function createBrowse({
     else if (mode === 'stations') renderBusStops(busRt, busRtdir);
   }
 
+  /** Re-render bike list once stations + status are ready. */
+  function onBikeDataChange() {
+    if (!isOpen() || kind !== 'bike') return;
+    renderBikeStations();
+  }
+
   // ---- event wiring -----------------------------------------------------
 
   document.getElementById('browse-close')?.addEventListener('click', close);
@@ -390,9 +461,19 @@ export function createBrowse({
     busData.ensureLoaded();
     open('lines');
   });
+  document.getElementById('browse-kind-bike')?.addEventListener('click', () => {
+    kind = 'bike';
+    ensureBikeData();
+    open('lines');
+  });
   searchInput?.addEventListener('input', () => {
     if (kind === 'bus' && mode === 'lines') {
       busQuery = searchInput.value;
+      renderLines();
+      return;
+    }
+    if (kind === 'bike' && mode === 'lines') {
+      bikeQuery = searchInput.value;
       renderLines();
       return;
     }
@@ -405,6 +486,7 @@ export function createBrowse({
     isOpen,
     restore,
     onBusDataChange,
+    onBikeDataChange,
     /** @returns {boolean} true when the search view is the one on screen */
     isSearch: () => mode === 'search' && isOpen(),
     /** The line being browsed — the board uses it to resolve transfer stops. */
@@ -415,7 +497,9 @@ export function createBrowse({
       return kind;
     },
     setKind(next) {
-      kind = next === 'bus' ? 'bus' : 'train';
+      if (next === 'bus') kind = 'bus';
+      else if (next === 'bike') kind = 'bike';
+      else kind = 'train';
     },
   };
 }

@@ -12,6 +12,9 @@ import { CAR_CAP } from './cars.js';
 import { mPerDegLon, M_PER_DEG_LAT } from './tracks.js';
 import { diamondRing, pickSnapLine } from './stations-rail.js';
 
+// Re-export under a neutral name so bike code does not import "buses".
+export { capBuses as capNearViewport } from './buses.js';
+
 // Neon palette anchored to official CTA brand colors (transitchicago.com
 // developers/branding, 2026) then boosted for cyberpunk readability on a
 // near-black stage. Official RGB → neon:
@@ -110,6 +113,13 @@ const CAR_LIGHT_LATERAL_M = 0.8; // half the headlight/taillight pair's spacing
 const CAR_BODY_COLOR = [18, 18, 22];
 const CAR_HEADLIGHT_COLOR = [255, 190, 90];
 const CAR_TAILLIGHT_COLOR = [220, 35, 35];
+
+// Divvy: fixed docks. City zoom (~11) with every station drawn is clutter;
+// gate below LOOP, then reuse capBuses for the viewport budget.
+const BIKE_MIN_ZOOM = 12.5;
+const BIKE_CAP = 120;
+// Lime/teal — sits between Green (~140°) and Blue (~195°).
+const BIKE_BASE = [40, 220, 160];
 
 // Offsets `[lon, lat]` by `meters` along compass bearing `headingDeg`
 // (0 = north, clockwise) — used to build each bus's two-point capsule path
@@ -218,11 +228,12 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   const {
     trailVersion = 0,
     stations = {},
-    display = { trains: true, stations: true, buses: true, cars: true },
+    display = { trains: true, stations: true, buses: true, cars: true, bikes: true },
     buses = [],
     busTrailVersion = 0,
     viewportCenter = [0, 0],
     cars = [],
+    bikes = [],
     zoom = 0,
     lineStatus = {},
     accessibilityStations = EMPTY_SET,
@@ -256,6 +267,19 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
     display.cars && zoom >= CAR_MIN_ZOOM ? cars.filter((c) => c.pos).slice(0, CAR_CAP) : [];
   const headlights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, CAR_BODY_HALF_LEN_M));
   const taillights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, -CAR_BODY_HALF_LEN_M));
+
+  // Divvy docks: zoom gate + nearest-to-viewport cap. Each station carries
+  // lat/lon (not pos) — map to the shape capBuses expects.
+  const shownBikes =
+    display.bikes && zoom >= BIKE_MIN_ZOOM
+      ? capBuses(
+          bikes
+            .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon))
+            .map((s) => ({ ...s, pos: [s.lon, s.lat] })),
+          viewportCenter,
+          BIKE_CAP,
+        )
+      : [];
 
   // Live Nav: stations should already be rail-snapped (main.js); still filter by line.
   const shownStations = getShownStations(stations, visibleLines, display);
@@ -519,6 +543,28 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       getRadius: 8,
       radiusMinPixels: 6,
       radiusMaxPixels: 10,
+      parameters: { depthTest: false },
+    }),
+    // Divvy: capacity → radius; fill ratio = (classic + ebikes) / capacity.
+    new ScatterplotLayer({
+      id: 'divvy-stations',
+      data: shownBikes,
+      pickable: true,
+      getPosition: (d) => d.pos,
+      getRadius: (d) => 6 + Math.min(18, (d.capacity || 0) * 0.45),
+      radiusMinPixels: 3,
+      radiusMaxPixels: 14,
+      getFillColor: (d) => {
+        const avail = (d.classic || 0) + (d.ebikes || 0);
+        const cap = Math.max(1, d.capacity || 1);
+        const ratio = Math.min(1, avail / cap);
+        // Empty → muted grey-teal; full → bright lime.
+        const r = Math.round(BIKE_BASE[0] * (0.25 + 0.75 * ratio));
+        const g = Math.round(BIKE_BASE[1] * (0.35 + 0.65 * ratio));
+        const b = Math.round(BIKE_BASE[2] * (0.4 + 0.6 * ratio));
+        const a = d.renting === false ? 90 : 210;
+        return [r, g, b, a];
+      },
       parameters: { depthTest: false },
     }),
   ];

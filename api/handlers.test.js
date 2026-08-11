@@ -3,6 +3,7 @@ import { guardRequest } from './_guard.js';
 import busHandler from './bus/[...path].js';
 import ttHandler from './tt.js';
 import alertsHandler, { isAllowedAlertEndpoint } from './alerts/[...path].js';
+import divvyHandler, { isAllowedDivvyEndpoint } from './divvy/[...path].js';
 
 /** Minimal Vercel-style res double that records what the handler wrote. */
 function mockRes() {
@@ -243,6 +244,79 @@ describe('alerts proxy handler', () => {
       res,
     );
     expect(res.headers['cache-control']).toContain('s-maxage=60');
+  });
+});
+
+describe('divvy proxy handler', () => {
+  it('allows exactly station_status and station_information', () => {
+    expect(isAllowedDivvyEndpoint('station_status.json')).toBe(true);
+    expect(isAllowedDivvyEndpoint('station_information.json')).toBe(true);
+    expect(isAllowedDivvyEndpoint('free_bike_status.json')).toBe(false);
+    expect(isAllowedDivvyEndpoint('../../etc')).toBe(false);
+    expect(isAllowedDivvyEndpoint('')).toBe(false);
+  });
+
+  it('forwards a nested path to Lyft GBFS', async () => {
+    const res = mockRes();
+    await divvyHandler(
+      browserReq({
+        url: '/api/divvy/station_status.json',
+        query: { path: 'station_status.json' },
+      }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    const target = fetchSpy.mock.calls[0][0];
+    expect(target).toContain('gbfs.lyft.com');
+    expect(target).toContain('station_status.json');
+  });
+
+  it('strips the ...path param Vercel appends for a catch-all route', async () => {
+    const res = mockRes();
+    await divvyHandler(
+      browserReq({
+        url: '/api/divvy/station_status.json?...path=station_status.json',
+        query: { '...path': 'station_status.json' },
+      }),
+      res,
+    );
+    const target = fetchSpy.mock.calls[0][0];
+    expect(target).not.toContain('path');
+    expect(target).toContain('station_status.json');
+  });
+
+  it('rejects an endpoint outside the allowlist', async () => {
+    const res = mockRes();
+    await divvyHandler(
+      browserReq({ url: '/api/divvy/x', query: { path: 'x' } }),
+      res,
+    );
+    expect(res.statusCode).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('still refuses a caller that is not our page', async () => {
+    const req = browserReq({
+      url: '/api/divvy/station_status.json',
+      query: { path: 'station_status.json' },
+    });
+    delete req.headers.referer;
+    const res = mockRes();
+    await divvyHandler(req, res);
+    expect(res.statusCode).toBe(403);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('sets s-maxage=30 shared cache', async () => {
+    const res = mockRes();
+    await divvyHandler(
+      browserReq({
+        url: '/api/divvy/station_status.json',
+        query: { path: 'station_status.json' },
+      }),
+      res,
+    );
+    expect(res.headers['cache-control']).toContain('s-maxage=30');
   });
 });
 

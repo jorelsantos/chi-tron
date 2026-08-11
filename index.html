@@ -958,9 +958,9 @@
       flex: 1;
       border: none;
       border-radius: var(--glass-radius-xs);
-      padding: 10px 12px;
+      padding: 10px 8px;
       font-family: inherit;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 650;
       letter-spacing: 0.06em;
       text-transform: uppercase;
@@ -1001,8 +1001,51 @@
     .arr-orb-bus {
       --orb-rgb: 90, 150, 230;
     }
-    /* Station search hides Train|Bus; bus route filter keeps the toggle. */
-    #browse-sheet.mode-search:not(.mode-bus-list) #browse-kind { display: none; }
+    /* Station search hides kind tabs; bus/bike filter lists keep the toggle. */
+    #browse-sheet.mode-search:not(.mode-bus-list):not(.mode-bike-list) #browse-kind { display: none; }
+    #browse-sheet.mode-bike-list #browse-search-input { display: block; }
+    .arr-orb-bike {
+      --orb-rgb: 40, 220, 160;
+    }
+    .bike-stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 4px 0 8px;
+    }
+    .bike-stat {
+      padding: 12px 14px;
+      border-radius: var(--glass-radius-sm);
+      background: rgba(0, 0, 0, 0.28);
+      box-shadow: 0 0 0 0.5px var(--glass-white-3) inset;
+    }
+    .bike-stat-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--type-tertiary);
+      margin-bottom: 4px;
+    }
+    .bike-stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+    .bike-flag {
+      margin: 6px 0 10px;
+      padding: 10px 14px;
+      border-radius: var(--glass-radius-sm);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #ffb4a8;
+      background: rgba(180, 40, 40, 0.22);
+      box-shadow: 0 0 0 0.5px rgba(255, 120, 100, 0.35) inset;
+    }
     #browse-search-input {
       display: none; width: calc(100% - 28px); margin: 10px 14px 6px;
       padding: 13px 16px; border-radius: var(--glass-radius-sm);
@@ -1289,9 +1332,10 @@
       <div id="browse-title">Lines</div>
       <button type="button" id="browse-close" aria-label="Close">✕</button>
     </div>
-    <div id="browse-kind" role="group" aria-label="Train or bus">
+    <div id="browse-kind" role="group" aria-label="Train, bus or bike">
       <button type="button" id="browse-kind-train" class="active" aria-pressed="true">Train</button>
       <button type="button" id="browse-kind-bus" aria-pressed="false">Bus</button>
+      <button type="button" id="browse-kind-bike" aria-pressed="false">Bike</button>
     </div>
     <input id="browse-search-input" type="search" placeholder="Station name…" enterkeyhint="search" autocomplete="off" />
     <div id="browse-list"></div>
