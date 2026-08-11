@@ -2,7 +2,10 @@
 // Catch-all so /api/bus/getvehicles and /api/bus/getpredictions both hit this
 // function (api/bus.js alone only mounts /api/bus on Vercel).
 
+import { guardRequest, isAllowedBusMethod } from '../_guard.js';
+
 export default async function handler(req, res) {
+  if (!guardRequest(req, res)) return;
   const key = process.env.CTA_BUS_KEY;
   if (!key) {
     res.status(500).json({ error: 'CTA_BUS_KEY not configured' });
@@ -23,7 +26,15 @@ export default async function handler(req, res) {
       res.status(400).json({ error: 'missing bus API method (e.g. getvehicles)' });
       return;
     }
-    const target = new URL(`https://www.ctabustracker.com/bustime/api/v3/${sub}`);
+    // Exact-match allowlist, not sanitizing: `sub` is interpolated into the
+    // upstream path below, so anything outside the two methods the client
+    // actually calls — including `..` traversal out of /bustime/api/v3/ —
+    // must never reach the URL constructor.
+    if (!isAllowedBusMethod(sub)) {
+      res.status(400).json({ error: 'unsupported bus API method' });
+      return;
+    }
+    const target = new URL(`https://www.ctabustracker.com/bustime/api/v3/${sub.toLowerCase()}`);
     incoming.searchParams.forEach((v, k) => {
       if (k === 'key' || k === 'path') return;
       target.searchParams.set(k, v);

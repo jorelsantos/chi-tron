@@ -1,7 +1,12 @@
 // Production proxy: CTA Train Tracker positions (ttpositions).
 // Mirrors vite.config.js /api/tt — key stays in host env (CTA_KEY).
 
+import { guardRequest } from './_guard.js';
+
 export default async function handler(req, res) {
+  // Public repo + key-injecting proxy: reject anything that is not our own
+  // page, over budget, or over the per-IP rate. See api/_guard.js.
+  if (!guardRequest(req, res)) return;
   const key = process.env.CTA_KEY;
   if (!key) {
     res.status(500).json({ error: 'CTA_KEY not configured' });
