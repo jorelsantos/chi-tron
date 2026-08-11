@@ -830,6 +830,12 @@
       box-shadow: 0 0 0 0.5px rgba(80, 255, 160, 0.4) inset;
       background: rgba(40, 220, 120, 0.1);
     }
+    /* --orb-rgb is a bare "r, g, b" triple so both the fill and the glow can
+       be built from one value. src/board.js sets it per row from the line's
+       colour; the fallback is Orange, the historical default. It replaced an
+       inline background on the element, which beat this rule and left the
+       highlight hardcoded outside the token ladder. The glow was hardcoded
+       orange and never followed the line at all. */
     .arr-orb {
       width: 22px;
       height: 22px;
@@ -837,10 +843,10 @@
       flex-shrink: 0;
       background:
         radial-gradient(circle at 32% 28%, var(--glass-white-5) 0%, transparent 42%),
-        var(--cta-orange);
+        rgb(var(--orb-rgb, 249, 70, 28));
       box-shadow:
         0 0 0 1px var(--glass-white-5),
-        0 0 10px rgba(249, 70, 28, 0.45);
+        0 0 10px rgba(var(--orb-rgb, 249, 70, 28), 0.45);
     }
     .arr-dest {
       font-size: 17px;
@@ -979,10 +985,10 @@
       font-size: 12px;
       border-radius: var(--glass-radius-xs);
     }
+    /* Setting the triple is enough — the fill and the glow both follow it, so
+       this no longer needs to restate the gradient or win with !important. */
     .arr-orb-bus {
-      background:
-        radial-gradient(circle at 32% 28%, var(--glass-white-5) 0%, transparent 42%),
-        rgb(90, 150, 230) !important;
+      --orb-rgb: 90, 150, 230;
     }
     /* Station search hides Train|Bus; bus route filter keeps the toggle. */
     #browse-sheet.mode-search:not(.mode-bus-list) #browse-kind { display: none; }

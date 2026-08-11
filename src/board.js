@@ -152,7 +152,7 @@ export function createBoard({
         if (r.isApp) row.classList.add('approaching');
         const minsLabel = r.minutes === 'DUE' || r.isApp ? 'DUE' : String(r.minutes);
         row.innerHTML = `
-          <span class="arr-orb" style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,0.4) 0%, transparent 42%), rgb(${orbColor.join(',')})" aria-hidden="true"></span>
+          <span class="arr-orb" style="--orb-rgb: ${orbColor.join(',')}" aria-hidden="true"></span>
           <span class="arr-dest">${escapeHtml(shortDestName(r))}</span>
           <span class="arr-clock">${escapeHtml(r.clock || '')}</span>
           <span class="${minsLabel === 'DUE' ? 'arr-mins due' : 'arr-mins'}">${escapeHtml(minsLabel)}</span>
