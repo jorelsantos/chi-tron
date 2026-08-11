@@ -7,6 +7,7 @@ import {
   createRateLimiter,
   createDailyBudget,
   isAllowedBusMethod,
+  isRouteParam,
 } from './_guard.js';
 
 describe('hostOf', () => {
@@ -174,6 +175,26 @@ describe('createDailyBudget', () => {
     expect(b.used()).toBe(2);
     t = Date.parse('2026-08-12T10:00:00Z');
     expect(b.used()).toBe(0);
+  });
+});
+
+describe('isRouteParam', () => {
+  it('matches the ...path key Vercel appends for [...path].js', () => {
+    expect(isRouteParam('...path')).toBe(true);
+  });
+
+  it('matches a renamed catch-all slug', () => {
+    expect(isRouteParam('...slug')).toBe(true);
+  });
+
+  it('still matches the plain path key', () => {
+    expect(isRouteParam('path')).toBe(true);
+  });
+
+  it('leaves real upstream parameters alone', () => {
+    for (const k of ['rt', 'type', 'outputType', 'activeonly', 'stpid', 'pathfinder']) {
+      expect(isRouteParam(k)).toBe(false);
+    }
   });
 });
 

@@ -2,7 +2,7 @@
 // Catch-all so /api/bus/getvehicles and /api/bus/getpredictions both hit this
 // function (api/bus.js alone only mounts /api/bus on Vercel).
 
-import { guardRequest, isAllowedBusMethod } from '../_guard.js';
+import { guardRequest, isAllowedBusMethod, isRouteParam } from '../_guard.js';
 
 export default async function handler(req, res) {
   if (!guardRequest(req, res)) return;
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     }
     const target = new URL(`https://www.ctabustracker.com/bustime/api/v3/${sub.toLowerCase()}`);
     incoming.searchParams.forEach((v, k) => {
-      if (k === 'key' || k === 'path') return;
+      if (k === 'key' || isRouteParam(k)) return;
       target.searchParams.set(k, v);
     });
     target.searchParams.set('key', key);
