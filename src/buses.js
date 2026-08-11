@@ -159,14 +159,38 @@ export class BusEngine {
    */
   constructor(patternsData = {}) {
     this.patterns = new Map();
-    for (const [pid, p] of Object.entries(patternsData.patterns ?? {})) {
-      this.patterns.set(pid, preparePattern(p));
-    }
-    this.routePids = patternsData.routes ?? {};
+    this.routePids = {};
     this.buses = new Map(); // vehicle id -> bus state
     this.onStatus = () => {};
     this.trailVersion = 0;
     this.failures = 0;
+    this.loadPatterns(patternsData);
+  }
+
+  /**
+   * Replace this engine's pattern geometry after construction.
+   *
+   * Exists because patterns.json is ~3.2 MB and boot() must not block the
+   * map on it (see src/bus-data.js): the engine is constructed empty so the
+   * map can paint, then hydrated when the bake arrives. Call `startLive()`
+   * only after this resolves — `startLive()` reads `routePids` once to size
+   * the poll ledger's `requestsPerCall`, so starting an empty engine would
+   * both poll the fallback marquee and undercount its own request volume.
+   *
+   * @param {{patterns?: Record<string, object>, routes?: Record<string, string[]>}} patternsData
+   * @returns {this}
+   */
+  loadPatterns(patternsData = {}) {
+    this.patterns = new Map();
+    for (const [pid, p] of Object.entries(patternsData.patterns ?? {})) {
+      this.patterns.set(pid, preparePattern(p));
+    }
+    this.routePids = patternsData.routes ?? {};
+    // Any bus already on screen was placed against the previous geometry;
+    // its pid may not exist here, which would freeze it mid-map. Drop them
+    // and let the next poll re-place every vehicle against the new bake.
+    this.buses.clear();
+    return this;
   }
 
   // ---- shared per-frame advance (mirrors trains.js's tick/#tickLive/#tickMock) ----

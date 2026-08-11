@@ -48,7 +48,10 @@ const mPerDegLon = (lat) => 111320 * Math.cos((lat * Math.PI) / 180);
 function parseCsv(text) {
   // GTFS csv is simple enough: no embedded newlines in the files we use.
   const lines = text.split('\n').filter((l) => l.trim());
-  const headers = lines[0].replace(/^﻿/, '').split(',').map((h) => h.trim().replace(/"/g, ''));
+  // U+FEFF is the UTF-8 byte order mark. CTA's GTFS files carry one, and it
+  // would otherwise glue itself to the first header name. Written as an escape
+  // rather than the literal character so it stays visible when reading.
+  const headers = lines[0].replace(/^\uFEFF/, '').split(',').map((h) => h.trim().replace(/"/g, ''));
   return lines.slice(1).map((line) => {
     const cells = line.split(',').map((c) => c.trim().replace(/"/g, ''));
     return Object.fromEntries(headers.map((h, i) => [h, cells[i]]));

@@ -1,0 +1,47 @@
+name: CI
+
+# Runs on every pull request and on pushes to main. The point is that nobody
+# has to remember: the 212 tests in this repo already exist, and this is what
+# makes them count before a change reaches Vercel.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A second push to the same branch cancels the first — no point finishing a run
+# for a commit that has already been replaced.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+# No CTA_KEY or CTA_BUS_KEY secret is needed here, on purpose:
+#   - every test stubs fetch, so nothing calls CTA
+#   - `npm run build` never reads the keys; only the dev-server proxy in
+#     vite.config.js does, and that path does not run in CI
+#
+# `npm run patterns` is deliberately absent. It needs CTA_BUS_KEY and calls the
+# live Bus Tracker API, so rebuilding the bake stays a local, intentional act
+# rather than something that happens on every push.

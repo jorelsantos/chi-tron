@@ -2,106 +2,161 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>CHI-TRON</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --neon-cyan: #00d4ff;
       --hud-dim: rgba(160, 190, 255, 0.55);
-      /* Liquid Glass Neon — clearer lens so map neon bleeds through */
-      --glass-fill: rgba(16, 20, 36, 0.38);
-      --glass-fill-strong: rgba(12, 16, 30, 0.52);
-      --glass-blur: 32px;
-      --glass-sat: 1.75;
-      --glass-bright: 1.1;
-      --glass-radius: 22px;
-      --glass-radius-sm: 16px;
+      /* Dark instrument glass — black frost + blur (not candy liquid glass) */
+      --glass-fill: rgba(0, 0, 0, 0.74);
+      --glass-fill-strong: rgba(0, 0, 0, 0.88);
+      /* Blur ladder: lg / md / sm (lg-lens refraction stays a documented exception) */
+      --glass-blur: 40px;
+      --glass-blur-md: 16px;
+      --glass-blur-sm: 8px;
+      --glass-sat: 1.05;
+      --glass-bright: 1.0;
+      /* Radius ladder: pill / lg / md / sm / xs — reuse --glass-radius* names */
+      --glass-radius: 20px;         /* lg — main sheets */
+      --glass-radius-sm: 14px;      /* md — cards, rows, inputs */
+      --glass-radius-xs: 8px;       /* sm — compact chrome */
+      --glass-radius-2xs: 4px;      /* xs — micro controls */
+      --glass-radius-pill: 999px;    /* pill */
       --fab-size: 64px;
-      /* Tron accents on glass (Phase B) — subtle, not nightclub */
+      --font-ui: "Space Grotesk", system-ui, -apple-system, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+      /* Tron accents — neon for data only, not panel frames */
       --tron-org: #ff8c3c;
       --tron-cyan: #00d4ff;
-      --tron-glow-org: rgba(255, 110, 40, 0.22);
-      --tron-glow-cyan: rgba(0, 212, 255, 0.2);
-      --tron-rail: rgba(255, 140, 60, 0.85);
+      --tron-glow-org: rgba(255, 110, 40, 0.14);
+      --tron-glow-cyan: rgba(0, 212, 255, 0.16);
+      --tron-rail: rgba(200, 210, 230, 0.55);
       --type-primary: #ffffff;
-      --type-secondary: rgba(220, 230, 250, 0.72);
-      --type-tertiary: rgba(180, 200, 230, 0.55);
+      --type-secondary: rgba(220, 230, 250, 0.78);
+      --type-tertiary: rgba(180, 200, 230, 0.58);
       --mins-size: 38px;
       --cta-orange: #f9461c;
-      /* Spring sheet open (Phase C) */
       --ease-sheet: 0.38s cubic-bezier(0.22, 1.15, 0.36, 1);
       --ease-press: 0.16s cubic-bezier(0.22, 1, 0.36, 1);
       --safe-b: max(16px, env(safe-area-inset-bottom));
       --safe-t: max(10px, env(safe-area-inset-top));
       --safe-l: max(12px, env(safe-area-inset-left));
       --safe-r: max(12px, env(safe-area-inset-right));
-      /* legacy aliases */
       --glass-bg: var(--glass-fill);
       --glass-bg-strong: var(--glass-fill-strong);
-      --glass-border: rgba(255, 255, 255, 0.14);
-      --glass-border-org: rgba(255, 140, 60, 0.55);
-      --glass-highlight: linear-gradient(165deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.06) 28%, rgba(255,255,255,0) 55%);
+      /* White surface ladder (5 steps) — fills + inset rims on glass */
+      --glass-white-1: rgba(255, 255, 255, 0.04);  /* faint */
+      --glass-white-2: rgba(255, 255, 255, 0.08);  /* soft fill */
+      --glass-white-3: rgba(255, 255, 255, 0.12);  /* default edge */
+      --glass-white-4: rgba(255, 255, 255, 0.20);  /* hover / mid inset */
+      --glass-white-5: rgba(255, 255, 255, 0.32);  /* strong / specular */
+      --glass-border: var(--glass-white-3);
+      --glass-border-strong: rgba(180, 200, 220, 0.22);
+      --glass-border-org: var(--glass-border-strong);
+      --glass-highlight: linear-gradient(165deg, var(--glass-white-3) 0%, var(--glass-white-1) 28%, rgba(255, 255, 255, 0) 55%);
     }
+    /* blur(1px) here is a feature-query probe, not a glass surface — leave hardcoded */
     @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
       :root {
-        --glass-fill: rgba(10, 14, 26, 0.94);
-        --glass-fill-strong: rgba(8, 12, 22, 0.96);
+        --glass-fill: rgba(0, 0, 0, 0.94);
+        --glass-fill-strong: rgba(0, 0, 0, 0.97);
       }
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { height: 100%; background: #05060a; overflow: hidden; }
-    #map { position: absolute; inset: 0; width: 100%; height: 100%; }
+    html, body {
+      height: 100%; background: #05060a; overflow: hidden;
+      font-family: var(--font-ui);
+      /* Mobile-first: block browser pinch/double-tap page zoom over the map app */
+      touch-action: manipulation;
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+    }
+    #map {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      touch-action: none; /* MapLibre owns gestures */
+    }
+    .maplibregl-canvas-container,
+    .maplibregl-canvas {
+      touch-action: none;
+    }
 
     /* HUD chrome — never intercepts map interaction */
-    .hud { position: absolute; z-index: 10; pointer-events: none; font-family: "SF Mono", "Menlo", monospace; }
+    .hud { position: absolute; z-index: 10; pointer-events: none; font-family: var(--font-mono); }
+
+    /* Compact mobile header: glass pill, not floating tall type */
     #wordmark {
-      top: 18px; left: 22px;
-      font-size: 22px; font-weight: 700; letter-spacing: 0.35em;
+      top: max(10px, env(safe-area-inset-top));
+      left: max(12px, env(safe-area-inset-left));
+      z-index: 16;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px 9px 14px;
+      border-radius: var(--glass-radius-sm);
+      background: rgba(0, 0, 0, 0.62);
+      -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(1.1);
+      backdrop-filter: blur(var(--glass-blur-md)) saturate(1.1);
+      box-shadow:
+        0 0 0 0.5px var(--glass-white-3) inset,
+        0 8px 28px rgba(0, 0, 0, 0.45);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
       color: var(--neon-cyan);
-      text-shadow: 0 0 8px rgba(0, 212, 255, 0.9), 0 0 28px rgba(0, 212, 255, 0.45);
+      text-shadow: 0 0 10px rgba(0, 212, 255, 0.55);
+      line-height: 1;
     }
     #wordmark small {
-      display: block; font-size: 9px; font-weight: 400; letter-spacing: 0.42em;
-      color: var(--hud-dim); text-shadow: none; margin-top: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin: 0;
+      padding: 3px 7px;
+      border-radius: var(--glass-radius-pill);
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      color: #7dffb0;
+      background: rgba(40, 120, 70, 0.28);
+      border: 1px solid rgba(90, 220, 140, 0.35);
+      text-shadow: none;
     }
-    #clock {
-      top: 22px; right: 24px;
-      font-size: 18px; letter-spacing: 0.18em; color: var(--hud-dim);
-      text-shadow: 0 0 6px rgba(120, 160, 255, 0.35);
+    #wordmark small::before {
+      content: "";
+      width: 5px; height: 5px; border-radius: 50%;
+      background: #3bff6f;
+      box-shadow: 0 0 6px rgba(59, 255, 111, 0.9);
     }
-    #status {
-      top: 48px; right: 24px;
-      font-size: 10px; letter-spacing: 0.3em; color: var(--hud-dim);
+
+    /* Dev/status HUD — hidden on tracker mobile; DOM kept for main.js */
+    #clock,
+    #status,
+    #fps,
+    #bus-status,
+    #telemetry {
+      display: none !important;
     }
-    #status.live { color: #3bff6f; text-shadow: 0 0 6px rgba(59, 255, 111, 0.6); }
-    #status.lost { color: #ff3b4e; text-shadow: 0 0 6px rgba(255, 59, 78, 0.6); }
-    /* U14: BUDGET HOLD — the poll governor hit its self-imposed daily
-       ceiling (R10) and stopped issuing requests. Amber so it reads as a
-       deliberate, safe stop rather than the failure states green/red imply. */
-    #status.hold { color: #ffb020; text-shadow: 0 0 6px rgba(255, 176, 32, 0.6); }
-    #fps {
-      top: 66px; right: 24px;
-      font-size: 10px; letter-spacing: 0.2em; color: rgba(140, 160, 200, 0.5);
-    }
-    /* U9: the bus feed's own status, distinct from #status (trains) above —
-       three independent feeds (U12 step 5's plan) means one shared light
-       would either hide a bus-only outage or misreport a live train feed as
-       down. Same class/color vocabulary as #status, smaller and dimmer
-       since it's the secondary indicator. */
-    #bus-status {
-      top: 80px; right: 24px;
-      font-size: 9px; letter-spacing: 0.26em; color: rgba(140, 160, 200, 0.6);
-    }
-    #bus-status.live { color: #3bff6f; text-shadow: 0 0 6px rgba(59, 255, 111, 0.5); }
-    #bus-status.lost { color: #ff3b4e; text-shadow: 0 0 6px rgba(255, 59, 78, 0.5); }
-    #bus-status.hold { color: #ffb020; text-shadow: 0 0 6px rgba(255, 176, 32, 0.5); }
-    /* U9: patterns.json failed to load — buses are structurally off for the
-       whole session, not merely down/backing off. Dim gray reads as "not a
-       thing right now" rather than an error, distinct from live/lost/hold. */
-    #bus-status.disabled { color: rgba(140, 160, 200, 0.45); text-shadow: none; }
+    #status.live { color: #3bff6f; }
+    #status.lost { color: #ff3b4e; }
+    #status.hold { color: #ffb020; }
+    #bus-status.live { color: #3bff6f; }
+    #bus-status.lost { color: #ff3b4e; }
+    #bus-status.hold { color: #ffb020; }
+    #bus-status.disabled { color: rgba(140, 160, 200, 0.45); }
     #disclaimer {
-      bottom: 12px; left: 50%; transform: translateX(-50%); text-align: center;
-      font-size: 9px; letter-spacing: 0.14em; color: rgba(140, 160, 200, 0.4);
+      bottom: max(10px, env(safe-area-inset-bottom));
+      left: 50%; transform: translateX(-50%); text-align: center;
+      width: min(92vw, 420px);
+      font-size: 8px; letter-spacing: 0.1em; color: rgba(140, 160, 200, 0.38);
+      padding: 0 56px; /* clear FAB thumb zone */
+      pointer-events: none;
     }
 
     /* U17 (R14): click-to-follow HUD indicator — top-center, out of the
@@ -115,8 +170,8 @@
       display: none; align-items: center; gap: 10px;
       padding: 8px 14px; pointer-events: auto;
       background: linear-gradient(160deg, rgba(6, 9, 18, 0.78), rgba(4, 6, 13, 0.6));
-      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(0, 212, 255, 0.35); border-radius: 8px;
+      backdrop-filter: blur(var(--glass-blur-md)); -webkit-backdrop-filter: blur(var(--glass-blur-md));
+      border: 1px solid rgba(0, 212, 255, 0.35); border-radius: var(--glass-radius-xs);
       font-size: 11px; letter-spacing: 0.14em; color: #cfe0ff;
     }
     #follow-indicator.visible { display: flex; }
@@ -125,30 +180,22 @@
       text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
     }
     #follow-release {
-      border: 1px solid rgba(160, 190, 255, 0.3); border-radius: 4px;
-      padding: 3px 8px; background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(160, 190, 255, 0.3); border-radius: var(--glass-radius-2xs);
+      padding: 3px 8px; background: var(--glass-white-2);
       color: var(--hud-dim); font-family: inherit; font-size: 9px;
       letter-spacing: 0.14em; cursor: pointer;
     }
-    #follow-release:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+    #follow-release:hover { background: var(--glass-white-3); color: #fff; }
 
-    /* U12: top-right telemetry stack, below clock/status/fps, and the
-       compass beneath it. Same right-edge alignment and .hud typography as
-       the existing corner elements. */
-    #telemetry {
-      top: 106px; right: 24px; text-align: right;
-    }
-    #telemetry .telemetry-label {
-      display: block; font-size: 9px; letter-spacing: 0.28em;
-      color: var(--hud-dim);
-    }
-    #telemetry .telemetry-count {
-      display: block; margin-top: 3px; font-size: 16px; letter-spacing: 0.1em;
-      color: var(--neon-cyan);
-      text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
-    }
+    /* Compass — bottom-left, clear of FABs and map-view stack */
     #compass {
-      top: 152px; right: 24px; width: 34px; height: 34px;
+      top: auto;
+      right: auto;
+      bottom: max(52px, calc(env(safe-area-inset-bottom) + 40px));
+      left: max(12px, env(safe-area-inset-left));
+      width: 40px;
+      height: 40px;
+      opacity: 0.88;
     }
     #compass svg { width: 100%; height: 100%; display: block; overflow: visible; }
     #compass circle {
@@ -160,7 +207,7 @@
     #compass-rose path { fill: var(--neon-cyan); }
     #compass-rose text {
       fill: var(--hud-dim); font-size: 7px; text-anchor: middle;
-      font-family: "SF Mono", "Menlo", monospace;
+      font-family: var(--font-mono);
     }
 
     /* U12: instrument sidebar — glass panel, docks left below the wordmark.
@@ -173,14 +220,14 @@
       padding: 16px 14px;
       overflow-y: auto;
       background: linear-gradient(160deg, rgba(6, 9, 18, 0.72), rgba(4, 6, 13, 0.5));
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: blur(var(--glass-blur-md));
+      -webkit-backdrop-filter: blur(var(--glass-blur-md));
       border: 1px solid rgba(0, 212, 255, 0.22);
-      border-radius: 10px;
+      border-radius: var(--glass-radius-xs);
       box-shadow: 0 0 30px rgba(0, 212, 255, 0.05) inset, 0 8px 30px rgba(0, 0, 0, 0.5);
     }
     #sidebar::-webkit-scrollbar { width: 6px; }
-    #sidebar::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.25); border-radius: 3px; }
+    #sidebar::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.25); border-radius: var(--glass-radius-2xs); }
 
     .panel-header {
       display: flex; align-items: baseline; justify-content: space-between;
@@ -202,7 +249,7 @@
        on what the map draws underneath (glass recipe, R6). */
     .line-row, .toggle-row, .camera-row {
       display: flex; align-items: center; gap: 10px;
-      width: 100%; border: 1px solid transparent; border-radius: 5px;
+      width: 100%; border: 1px solid transparent; border-radius: var(--glass-radius-2xs);
       padding: 6px 8px;
       background: rgba(5, 8, 17, 0.55);
       color: #cfe0ff; font-family: inherit; font-size: 12px; letter-spacing: 0.04em;
@@ -252,7 +299,7 @@
        reads as pressed. */
     #mode-rows { display: flex; gap: 6px; }
     .mode-btn {
-      flex: 1 1 0; border: 1px solid rgba(160, 190, 255, 0.25); border-radius: 5px;
+      flex: 1 1 0; border: 1px solid rgba(160, 190, 255, 0.25); border-radius: var(--glass-radius-2xs);
       padding: 8px 6px; background: rgba(5, 8, 17, 0.55);
       color: var(--hud-dim); font-family: inherit; font-weight: 700;
       font-size: 12px; letter-spacing: 0.16em; text-align: center; cursor: pointer;
@@ -301,26 +348,21 @@
     #sidebar.nav-compact {
       display: none;
     }
-    #wordmark {
-      top: max(12px, env(safe-area-inset-top));
-      left: max(14px, env(safe-area-inset-left));
-    }
-    #wordmark small { letter-spacing: 0.22em; }
-    /* Hide wordmark when board open on mobile so board is clean */
+    /* Hide chrome when board open so board is clean */
     @media (max-width: 899px) {
-      body:has(#station-sheet.open) #wordmark { opacity: 0; pointer-events: none; }
-      body:has(#station-sheet.open) #clock,
-      body:has(#station-sheet.open) #status,
-      body:has(#station-sheet.open) #fps,
-      body:has(#station-sheet.open) #bus-status,
-      body:has(#station-sheet.open) #telemetry,
-      body:has(#station-sheet.open) #compass { opacity: 0; pointer-events: none; }
+      body:has(#station-sheet.open) #wordmark,
+      body:has(#station-sheet.open) #compass,
+      body:has(#station-sheet.open) .map-view-controls {
+        opacity: 0; pointer-events: none;
+      }
+      body:has(#browse-sheet.open) #wordmark {
+        opacity: 0.35;
+      }
     }
 
     /*
-     * Liquid Glass material (web approx of Apple LG):
-     * layered fill + saturate blur + specular rim + thickness shadows.
-     * Optional SVG displacement for lens warp (prefers-reduced-motion off).
+     * Dark instrument glass: black frost + blur, neutral steel edge.
+     * Neon stays on trains/lines — not on panel chrome.
      */
     .lg {
       position: relative;
@@ -328,19 +370,18 @@
       overflow: hidden;
       border: none;
       background:
-        linear-gradient(155deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 20%, rgba(255, 255, 255, 0) 45%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(0, 0, 0, 0.1) 100%),
+        linear-gradient(180deg, var(--glass-white-2) 0%, rgba(0, 0, 0, 0.2) 100%),
         var(--glass-fill);
       -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright));
       backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright));
       box-shadow:
-        0 0 0 0.5px rgba(255, 255, 255, 0.35) inset,
-        0 1px 0 0 rgba(255, 255, 255, 0.22) inset,
-        0 -12px 28px rgba(0, 0, 0, 0.18) inset,
-        0 1px 2px rgba(0, 0, 0, 0.12),
-        0 12px 40px rgba(0, 0, 0, 0.42),
-        0 0 48px rgba(255, 110, 40, 0.07);
+        0 0 0 0.5px var(--glass-white-3) inset,
+        0 1px 0 0 var(--glass-white-2) inset,
+        0 -10px 24px rgba(0, 0, 0, 0.35) inset,
+        0 1px 2px rgba(0, 0, 0, 0.35),
+        0 16px 48px rgba(0, 0, 0, 0.55);
       color: var(--type-primary);
+      font-family: var(--font-ui);
     }
     .lg::before {
       content: "";
@@ -351,14 +392,13 @@
       z-index: 0;
       background: linear-gradient(
         125deg,
-        rgba(255, 255, 255, 0.28) 0%,
-        rgba(255, 255, 255, 0.06) 16%,
-        transparent 40%
+        var(--glass-white-2) 0%,
+        var(--glass-white-1) 18%,
+        transparent 42%
       );
-      opacity: 0.7;
-      mix-blend-mode: soft-light;
+      opacity: 0.85;
     }
-    /* Gradient border ring (wet glass edge + Tron energy) */
+    /* Neutral steel rim (no orange energy frame) */
     .lg::after {
       content: "";
       position: absolute;
@@ -368,14 +408,12 @@
       z-index: 0;
       padding: 1px;
       background: linear-gradient(
-        125deg,
-        rgba(255, 255, 255, 0.55) 0%,
-        rgba(255, 255, 255, 0.12) 22%,
-        rgba(255, 130, 50, 0.55) 48%,
-        rgba(0, 212, 255, 0.35) 72%,
-        rgba(255, 255, 255, 0.2) 100%
+        145deg,
+        var(--glass-white-5) 0%,
+        rgba(200, 210, 230, 0.14) 35%,
+        rgba(120, 140, 170, 0.18) 70%,
+        var(--glass-white-2) 100%
       );
-      background-size: 220% 220%;
       -webkit-mask:
         linear-gradient(#000 0 0) content-box,
         linear-gradient(#000 0 0);
@@ -386,49 +424,30 @@
       mask-composite: exclude;
     }
     .lg > * { position: relative; z-index: 1; }
-    .lg-org {
-      box-shadow:
-        0 0 0 0.5px rgba(255, 255, 255, 0.3) inset,
-        0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
-        0 -12px 28px rgba(0, 0, 0, 0.2) inset,
-        0 12px 40px rgba(0, 0, 0, 0.45),
-        0 0 56px var(--tron-glow-org);
-    }
+    .lg-org,
     .lg-cyan {
       box-shadow:
-        0 0 0 0.5px rgba(255, 255, 255, 0.3) inset,
-        0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
-        0 -12px 28px rgba(0, 0, 0, 0.2) inset,
-        0 12px 40px rgba(0, 0, 0, 0.45),
-        0 0 48px var(--tron-glow-cyan);
+        0 0 0 0.5px var(--glass-white-3) inset,
+        0 1px 0 0 var(--glass-white-2) inset,
+        0 -10px 24px rgba(0, 0, 0, 0.35) inset,
+        0 16px 48px rgba(0, 0, 0, 0.55);
     }
-    /* Living rim (Rim Pulse) — soft edge energy, not full neon flood */
     @media (prefers-reduced-motion: no-preference) {
-      .lg-org {
-        animation: tron-glow-org 3.4s ease-in-out infinite;
-      }
-      .lg-cyan:not(.fab) {
-        animation: tron-glow-cyan 3.8s ease-in-out infinite;
-      }
-      .lg-org::after,
-      .lg-cyan::after {
-        animation: tron-rim-shift 5s linear infinite;
-        background-size: 200% 200%;
-      }
+      /* no orange/cyan rim pulse on panels */
     }
     @keyframes tron-glow-org {
       0%, 100% {
         box-shadow:
-          0 0 0 0.5px rgba(255, 255, 255, 0.3) inset,
-          0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
+          0 0 0 0.5px var(--glass-white-5) inset,
+          0 1px 0 0 var(--glass-white-4) inset,
           0 -12px 28px rgba(0, 0, 0, 0.2) inset,
           0 12px 40px rgba(0, 0, 0, 0.45),
           0 0 40px rgba(255, 110, 40, 0.12);
       }
       50% {
         box-shadow:
-          0 0 0 0.5px rgba(255, 255, 255, 0.35) inset,
-          0 1px 0 0 rgba(255, 255, 255, 0.25) inset,
+          0 0 0 0.5px var(--glass-white-5) inset,
+          0 1px 0 0 var(--glass-white-4) inset,
           0 -12px 28px rgba(0, 0, 0, 0.2) inset,
           0 12px 40px rgba(0, 0, 0, 0.45),
           0 0 68px rgba(255, 110, 40, 0.28);
@@ -437,16 +456,16 @@
     @keyframes tron-glow-cyan {
       0%, 100% {
         box-shadow:
-          0 0 0 0.5px rgba(255, 255, 255, 0.3) inset,
-          0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
+          0 0 0 0.5px var(--glass-white-5) inset,
+          0 1px 0 0 var(--glass-white-4) inset,
           0 -12px 28px rgba(0, 0, 0, 0.2) inset,
           0 12px 40px rgba(0, 0, 0, 0.45),
           0 0 36px rgba(0, 212, 255, 0.1);
       }
       50% {
         box-shadow:
-          0 0 0 0.5px rgba(255, 255, 255, 0.35) inset,
-          0 1px 0 0 rgba(255, 255, 255, 0.25) inset,
+          0 0 0 0.5px var(--glass-white-5) inset,
+          0 1px 0 0 var(--glass-white-4) inset,
           0 -12px 28px rgba(0, 0, 0, 0.2) inset,
           0 12px 40px rgba(0, 0, 0, 0.45),
           0 0 60px rgba(0, 212, 255, 0.24);
@@ -463,6 +482,8 @@
     /*
      * Lens: SVG displacement on backdrop only (Chrome). Never filter: on the
      * panel — that warps type and kills board readability.
+     * EXCEPTION: blur(26px) is part of the refraction recipe, not the glass
+     * surface ladder — keep it out of --glass-blur-* so lens tuning stays free.
      */
     @supports ((-webkit-backdrop-filter: url(#lg-refract)) or (backdrop-filter: url(#lg-refract))) {
       @media (prefers-reduced-motion: no-preference) {
@@ -479,7 +500,7 @@
       inset: 9px;
       pointer-events: none;
       z-index: 2;
-      border-radius: calc(var(--glass-radius) - 8px);
+      border-radius: calc(var(--glass-radius) - var(--glass-radius-xs));
       opacity: 0.9;
       background:
         linear-gradient(var(--tron-bracket, var(--tron-cyan)), var(--tron-bracket, var(--tron-cyan))) top left / 14px 1.5px no-repeat,
@@ -494,6 +515,46 @@
     .lg-org > .tron-brackets { --tron-bracket: var(--tron-org); }
     .lg-cyan > .tron-brackets { --tron-bracket: var(--tron-cyan); }
 
+    /* Map view: 2D / 3D / LIVE — top-right, clear of header */
+    .map-view-controls {
+      position: absolute; z-index: 14;
+      right: var(--safe-r);
+      top: max(10px, env(safe-area-inset-top));
+      display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none;
+    }
+    .map-view-btn {
+      pointer-events: auto;
+      min-width: 52px;
+      height: 40px;
+      padding: 0 12px;
+      border-radius: var(--glass-radius-sm);
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      color: var(--type-secondary);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .map-view-btn[aria-pressed="true"] {
+      color: var(--type-primary);
+      box-shadow:
+        0 0 0 0.5px var(--glass-white-5) inset,
+        0 0 20px rgba(0, 212, 255, 0.22) !important;
+    }
+    .map-view-live {
+      letter-spacing: 0.16em;
+      color: rgba(100, 255, 160, 0.85);
+    }
+    .map-view-live:active {
+      filter: brightness(1.2);
+    }
+    @media (max-width: 720px) {
+      #sidebar { display: none !important; }
+    }
+
     /* FAB stack — thumb zone (large, readable glyphs) */
     #fab-stack {
       position: absolute; z-index: 15;
@@ -503,10 +564,10 @@
       pointer-events: none;
     }
     .fab {
-      width: var(--fab-size); height: var(--fab-size); border-radius: 999px;
+      width: var(--fab-size); height: var(--fab-size); border-radius: var(--glass-radius-pill);
       pointer-events: auto; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+      font-family: var(--font-ui);
       font-size: 20px; font-weight: 600;
       letter-spacing: 0.02em;
       color: var(--type-primary);
@@ -538,8 +599,8 @@
     .fab[aria-pressed="true"] {
       filter: brightness(1.14);
       box-shadow:
-        0 0 0 0.5px rgba(255, 255, 255, 0.45) inset,
-        0 1px 0 rgba(255, 255, 255, 0.28) inset,
+        0 0 0 0.5px var(--glass-white-5) inset,
+        0 1px 0 var(--glass-white-5) inset,
         0 8px 28px rgba(0, 0, 0, 0.4),
         0 0 32px rgba(0, 212, 255, 0.42) !important;
     }
@@ -557,7 +618,7 @@
       display: none; pointer-events: auto;
       padding: 12px 16px;
       border-radius: var(--glass-radius-sm);
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: var(--font-ui);
       font-size: 13px; font-weight: 500;
       letter-spacing: 0.01em;
       color: #ffe0c2;
@@ -598,7 +659,7 @@
         filter 0.2s ease;
       pointer-events: none;
       border-radius: var(--glass-radius);
-      font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+      font-family: var(--font-ui);
       color: var(--type-primary);
       padding: 12px 14px 16px;
     }
@@ -656,15 +717,15 @@
     }
     #sheet-back, #sheet-close {
       border: none;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.1);
+      border-radius: var(--glass-radius-pill);
+      background: var(--glass-white-2);
       color: var(--type-primary);
       font-family: inherit; font-size: 15px; font-weight: 500;
       padding: 0; cursor: pointer;
       min-height: 44px; min-width: 44px;
       height: 44px; width: 44px;
       display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 0 0 0.5px rgba(255,255,255,0.2) inset;
+      box-shadow: 0 0 0 0.5px var(--glass-white-4) inset;
       transition: background var(--ease-press), transform var(--ease-press), box-shadow var(--ease-press);
       justify-self: start;
       align-self: center;
@@ -680,11 +741,11 @@
       pointer-events: auto;
     }
     #sheet-back:hover, #sheet-close:hover {
-      background: rgba(255,255,255,0.14);
-      box-shadow: 0 0 0 0.5px rgba(255,255,255,0.28) inset, 0 0 16px rgba(0, 212, 255, 0.15);
+      background: var(--glass-white-3);
+      box-shadow: 0 0 0 0.5px var(--glass-white-5) inset, 0 0 16px rgba(0, 212, 255, 0.15);
     }
     #sheet-back:active, #sheet-close:active {
-      background: rgba(255,255,255,0.2);
+      background: var(--glass-white-4);
       transform: scale(0.92);
     }
     #sheet-rows {
@@ -712,7 +773,7 @@
     .dir-section + .dir-section {
       margin-top: 6px;
       padding-top: 12px;
-      border-top: 0.5px solid rgba(255, 255, 255, 0.12);
+      border-top: 0.5px solid var(--glass-white-3);
     }
     .dir-header {
       position: static;
@@ -749,17 +810,17 @@
       gap: 10px 12px;
       min-height: 54px;
       padding: 11px 14px;
-      border-radius: 16px;
+      border-radius: var(--glass-radius-sm);
       background: rgba(8, 12, 24, 0.42);
-      box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12) inset;
-      backdrop-filter: blur(8px) saturate(1.2);
-      -webkit-backdrop-filter: blur(8px) saturate(1.2);
+      box-shadow: 0 0 0 0.5px var(--glass-white-3) inset;
+      backdrop-filter: blur(var(--glass-blur-sm)) saturate(1.2);
+      -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(1.2);
       transition: background var(--ease-press), box-shadow var(--ease-press), transform var(--ease-press);
       -webkit-tap-highlight-color: transparent;
     }
     .arrival-row:active {
       transform: scale(0.985);
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--glass-white-2);
     }
     .arrival-row.delayed {
       box-shadow: 0 0 0 0.5px rgba(255, 190, 60, 0.45) inset;
@@ -769,17 +830,23 @@
       box-shadow: 0 0 0 0.5px rgba(80, 255, 160, 0.4) inset;
       background: rgba(40, 220, 120, 0.1);
     }
+    /* --orb-rgb is a bare "r, g, b" triple so both the fill and the glow can
+       be built from one value. src/board.js sets it per row from the line's
+       colour; the fallback is Orange, the historical default. It replaced an
+       inline background on the element, which beat this rule and left the
+       highlight hardcoded outside the token ladder. The glow was hardcoded
+       orange and never followed the line at all. */
     .arr-orb {
       width: 22px;
       height: 22px;
       border-radius: 50%;
       flex-shrink: 0;
       background:
-        radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.4) 0%, transparent 42%),
-        var(--cta-orange);
+        radial-gradient(circle at 32% 28%, var(--glass-white-5) 0%, transparent 42%),
+        rgb(var(--orb-rgb, 249, 70, 28));
       box-shadow:
-        0 0 0 1px rgba(255, 255, 255, 0.32),
-        0 0 10px rgba(249, 70, 28, 0.45);
+        0 0 0 1px var(--glass-white-5),
+        0 0 10px rgba(var(--orb-rgb, 249, 70, 28), 0.45);
     }
     .arr-dest {
       font-size: 17px;
@@ -808,7 +875,7 @@
       line-height: 1;
       min-width: 1.35em;
       text-align: right;
-      text-shadow: 0 0 20px rgba(255, 255, 255, 0.25);
+      text-shadow: 0 0 20px var(--glass-white-4);
     }
     .arr-mins.due {
       color: #6dffb0;
@@ -836,7 +903,7 @@
         opacity 0.28s ease;
       pointer-events: none;
       border-radius: var(--glass-radius);
-      font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+      font-family: var(--font-ui);
       color: var(--type-primary);
       display: flex; flex-direction: column;
     }
@@ -849,20 +916,20 @@
       display: flex; align-items: center; gap: 8px;
       padding: 14px 14px 10px;
       border-bottom: 0.5px solid rgba(0, 212, 255, 0.18);
-      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+      box-shadow: 0 1px 0 var(--glass-white-1);
     }
     #browse-back, #browse-close {
-      border: none; border-radius: 999px;
-      background: rgba(255,255,255,0.1); color: var(--type-primary);
+      border: none; border-radius: var(--glass-radius-pill);
+      background: var(--glass-white-2); color: var(--type-primary);
       font-size: 14px; font-weight: 600;
       min-height: 36px; min-width: 36px; padding: 0 10px; cursor: pointer;
       font-family: inherit;
-      box-shadow: 0 0 0 0.5px rgba(255,255,255,0.15) inset;
+      box-shadow: 0 0 0 0.5px var(--glass-white-3) inset;
       transition: background var(--ease-press), transform var(--ease-press), box-shadow var(--ease-press);
     }
     #browse-back:active, #browse-close:active {
       transform: scale(0.92);
-      background: rgba(255,255,255,0.18);
+      background: var(--glass-white-4);
     }
     #browse-title {
       flex: 1; font-size: 16px; font-weight: 700; letter-spacing: -0.01em;
@@ -872,14 +939,14 @@
       gap: 0;
       margin: 0 14px 8px;
       padding: 3px;
-      border-radius: 12px;
+      border-radius: var(--glass-radius-sm);
       background: rgba(0, 0, 0, 0.28);
-      box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12) inset;
+      box-shadow: 0 0 0 0.5px var(--glass-white-3) inset;
     }
     #browse-kind button {
       flex: 1;
       border: none;
-      border-radius: 10px;
+      border-radius: var(--glass-radius-xs);
       padding: 10px 12px;
       font-family: inherit;
       font-size: 13px;
@@ -893,7 +960,7 @@
     }
     #browse-kind button.active {
       color: #fff;
-      background: rgba(255, 255, 255, 0.12);
+      background: var(--glass-white-3);
       box-shadow: 0 0 0 0.5px rgba(0, 212, 255, 0.35) inset, 0 0 16px rgba(0, 212, 255, 0.12);
     }
     .bus-route-badge {
@@ -903,7 +970,7 @@
       min-width: 40px;
       height: 36px;
       padding: 0 8px;
-      border-radius: 10px;
+      border-radius: var(--glass-radius-xs);
       background: rgba(80, 140, 220, 0.35);
       color: #d6e8ff;
       font-size: 14px;
@@ -916,23 +983,23 @@
       min-width: 32px;
       height: 28px;
       font-size: 12px;
-      border-radius: 8px;
+      border-radius: var(--glass-radius-xs);
     }
+    /* Setting the triple is enough — the fill and the glow both follow it, so
+       this no longer needs to restate the gradient or win with !important. */
     .arr-orb-bus {
-      background:
-        radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.35) 0%, transparent 42%),
-        rgb(90, 150, 230) !important;
+      --orb-rgb: 90, 150, 230;
     }
     /* Station search hides Train|Bus; bus route filter keeps the toggle. */
     #browse-sheet.mode-search:not(.mode-bus-list) #browse-kind { display: none; }
     #browse-search-input {
       display: none; width: calc(100% - 28px); margin: 10px 14px 6px;
-      padding: 13px 16px; border-radius: 14px;
+      padding: 13px 16px; border-radius: var(--glass-radius-sm);
       border: none;
       background: rgba(0,0,0,0.28);
       color: #fff;
       font-size: 16px; font-family: inherit; font-weight: 500;
-      box-shadow: 0 0 0 0.5px rgba(255,255,255,0.14) inset;
+      box-shadow: 0 0 0 0.5px var(--glass-white-3) inset;
       outline: none;
     }
     #browse-search-input:focus {
@@ -953,14 +1020,14 @@
     .browse-row {
       display: flex; align-items: center; gap: 12px;
       width: 100%; text-align: left;
-      padding: 13px 12px; border: none; border-radius: 14px;
+      padding: 13px 12px; border: none; border-radius: var(--glass-radius-sm);
       background: transparent; color: var(--type-primary);
       font-size: 15px; font-weight: 550; font-family: inherit; cursor: pointer;
       min-height: 52px;
       transition: background var(--ease-press), box-shadow var(--ease-press), transform var(--ease-press);
     }
     .browse-row:hover {
-      background: rgba(255,255,255,0.08);
+      background: var(--glass-white-2);
     }
     .browse-row:active {
       background: rgba(0, 212, 255, 0.1);
@@ -969,7 +1036,7 @@
     }
     .browse-row:disabled { opacity: 0.38; cursor: not-allowed; }
     .browse-swatch {
-      width: 12px; height: 32px; border-radius: 6px; flex-shrink: 0;
+      width: 12px; height: 32px; border-radius: var(--glass-radius-2xs); flex-shrink: 0;
       box-shadow: 0 0 12px color-mix(in srgb, currentColor 55%, transparent);
     }
     /* CTA-style multi-line orbs on station rows */
@@ -983,7 +1050,7 @@
     .line-orb {
       width: 11px;
       height: 28px;
-      border-radius: 4px;
+      border-radius: var(--glass-radius-2xs);
       flex-shrink: 0;
       box-shadow: 0 0 8px color-mix(in srgb, currentColor 40%, transparent);
     }
@@ -1024,7 +1091,7 @@
       height: 10px;
       border-radius: 50%;
       flex-shrink: 0;
-      box-shadow: 0 0 8px rgba(255, 255, 255, 0.25);
+      box-shadow: 0 0 8px var(--glass-white-4);
     }
     .line-header-name { letter-spacing: 0.12em; }
     .browse-row .meta {
@@ -1094,7 +1161,12 @@
   <div id="map"></div>
   <div id="scanlines"></div>
   <div id="vignette"></div>
-  <div class="hud" id="wordmark">CHI-TRON<small>ORANGE LIVE</small></div>
+  <div class="hud" id="wordmark">CHI-TRON<small>LIVE</small></div>
+  <div id="map-view-controls" class="map-view-controls" role="group" aria-label="Map view">
+    <button type="button" class="map-view-btn lg" id="btn-view-2d" aria-pressed="true">2D</button>
+    <button type="button" class="map-view-btn lg" id="btn-view-3d" aria-pressed="false">3D</button>
+    <button type="button" class="map-view-btn lg map-view-live" id="btn-live-overview" title="Show live trains and buses">LIVE</button>
+  </div>
   <div class="hud" id="clock">--:--:--</div>
   <div class="hud" id="status">BOOT</div>
   <div class="hud" id="bus-status">BUS BOOT</div>
@@ -1182,9 +1254,9 @@
     </button>
   </div>
   <div class="hud lg lg-cyan" id="loc-chip">LOCATION OFF</div>
-  <button type="button" class="hud lg lg-org" id="nearest-chip" aria-live="polite"></button>
+  <button type="button" class="hud lg lg-cyan" id="nearest-chip" aria-live="polite"></button>
 
-  <div id="station-sheet" class="lg lg-org lg-lens" role="dialog" aria-label="Station arrivals">
+  <div id="station-sheet" class="lg lg-lens" role="dialog" aria-label="Station arrivals" aria-modal="true">
     <span class="tron-brackets" aria-hidden="true"></span>
     <div id="sheet-handle" aria-hidden="true"></div>
     <div id="sheet-header">
@@ -1199,7 +1271,7 @@
     <div id="sheet-rows" aria-live="polite"></div>
   </div>
 
-  <div id="browse-sheet" class="lg lg-cyan lg-lens" role="dialog" aria-label="Browse">
+  <div id="browse-sheet" class="lg lg-lens" role="dialog" aria-label="Browse" aria-modal="true">
     <span class="tron-brackets" aria-hidden="true"></span>
     <div id="browse-header">
       <button type="button" id="browse-back" aria-label="Back" hidden>←</button>
