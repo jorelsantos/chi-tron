@@ -3,7 +3,7 @@
 **Owner:** Grok
 **Auditor:** Claude (cold read of the diff, no context on decisions)
 **Branch:** cut a fresh branch off `feat/ux-tracker`
-**Status:** not started
+**Status:** done (feat/design-token-pass)
 
 ---
 
