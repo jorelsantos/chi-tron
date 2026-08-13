@@ -67,6 +67,15 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/alerts/, '/api/1.0'),
         },
+        // Divvy / Lyft GBFS — keyless public feed. Path segments are the
+        // allowlisted filenames (station_status.json, station_information.json).
+        '/api/divvy': {
+          target: 'https://gbfs.lyft.com',
+          changeOrigin: true,
+          rewrite: (path) =>
+            // Dev only. Prod resolves the version prefix from GBFS discovery.
+            path.replace(/^\/api\/divvy/, '/gbfs/1.1/chi/en'),
+        },
       },
     },
   };

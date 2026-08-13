@@ -137,6 +137,75 @@ describe('stationLineRgb', () => {
   });
 });
 
+describe('buildLayers divvy dots', () => {
+  const visibleLines = new Set(['Red']);
+  const station = (i, lon, lat) => ({
+    id: String(i),
+    name: `S${i}`,
+    lon,
+    lat,
+    capacity: 10,
+    classic: 2,
+    ebikes: 1,
+    docks: 5,
+    renting: true,
+  });
+
+  it('hides bikes below the zoom gate', () => {
+    const layers = buildLayers([], 0, visibleLines, {
+      bikes: [station(1, -87.63, 41.88)],
+      zoom: 13.4,
+      display: { bikes: true },
+    });
+    expect(layerById(layers, 'divvy-stations').props.data).toHaveLength(0);
+  });
+
+  it('shows bikes above the zoom gate', () => {
+    const layers = buildLayers([], 0, visibleLines, {
+      bikes: [station(1, -87.63, 41.88)],
+      zoom: 13.6,
+      display: { bikes: true },
+    });
+    expect(layerById(layers, 'divvy-stations').props.data.length).toBeGreaterThan(0);
+  });
+
+  it('drops stations outside viewportBounds', () => {
+    const layers = buildLayers([], 0, visibleLines, {
+      bikes: [station(1, -87.63, 41.88), station(2, -88.5, 42.2)],
+      zoom: 14,
+      display: { bikes: true },
+      viewportBounds: [-87.7, 41.8, -87.5, 41.95],
+    });
+    const data = layerById(layers, 'divvy-stations').props.data;
+    expect(data).toHaveLength(1);
+    expect(data[0].id).toBe('1');
+  });
+
+  it('caps in-bounds stations at 400', () => {
+    const bikes = Array.from({ length: 500 }, (_, i) =>
+      station(i, -87.63 + (i % 20) * 0.001, 41.88 + Math.floor(i / 20) * 0.001),
+    );
+    const layers = buildLayers([], 0, visibleLines, {
+      bikes,
+      zoom: 14,
+      display: { bikes: true },
+      viewportCenter: [-87.63, 41.88],
+      viewportBounds: [-88, 41.7, -87.4, 42.1],
+    });
+    expect(layerById(layers, 'divvy-stations').props.data).toHaveLength(400);
+  });
+
+  it('skips bounds filtering when viewportBounds is null', () => {
+    const layers = buildLayers([], 0, visibleLines, {
+      bikes: [station(1, -90, 40)],
+      zoom: 14,
+      display: { bikes: true },
+      viewportBounds: null,
+    });
+    expect(layerById(layers, 'divvy-stations').props.data).toHaveLength(1);
+  });
+});
+
 describe('buildLayers car layer (U11)', () => {
   const visibleLines = new Set(['Red']);
   const cars = [{ pos: [-87.6, 41.9], heading: 90 }];

@@ -3,6 +3,29 @@ import { guardRequest } from './_guard.js';
 import busHandler from './bus/[...path].js';
 import ttHandler from './tt.js';
 import alertsHandler, { isAllowedAlertEndpoint } from './alerts/[...path].js';
+import divvyHandler, {
+  isAllowedDivvyEndpoint,
+  resolveFeedUrl,
+  DISCOVERY_URL,
+  FALLBACK_BASE,
+} from './divvy/[...path].js';
+
+const DISCOVERY_DOC = {
+  data: {
+    en: {
+      feeds: [
+        {
+          name: 'station_status',
+          url: 'https://gbfs.lyft.com/gbfs/1.1/chi/en/station_status.json',
+        },
+        {
+          name: 'station_information',
+          url: 'https://gbfs.lyft.com/gbfs/1.1/chi/en/station_information.json',
+        },
+      ],
+    },
+  },
+};
 
 /** Minimal Vercel-style res double that records what the handler wrote. */
 function mockRes() {
@@ -57,11 +80,25 @@ beforeEach(() => {
   process.env.CTA_KEY = 'test-train-key';
   process.env.CTA_BUS_KEY = 'test-bus-key';
   delete process.env.ALLOWED_ORIGINS;
-  fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-    ok: true,
-    status: 200,
-    headers: { get: () => 'application/json' },
-    text: async () => '{"ok":true}',
+  resolveFeedUrl._cache = { urls: {}, until: 0 };
+  fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+    const href = String(url);
+    if (href === DISCOVERY_URL || href.includes('gbfs.json')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        text: async () => JSON.stringify(DISCOVERY_DOC),
+        json: async () => DISCOVERY_DOC,
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      text: async () => '{"ok":true}',
+      json: async () => ({ ok: true }),
+    };
   });
 });
 afterEach(() => {
@@ -243,6 +280,140 @@ describe('alerts proxy handler', () => {
       res,
     );
     expect(res.headers['cache-control']).toContain('s-maxage=60');
+  });
+});
+
+describe('divvy proxy handler', () => {
+  it('allows exactly station_status and station_information', () => {
+    expect(isAllowedDivvyEndpoint('station_status.json')).toBe(true);
+    expect(isAllowedDivvyEndpoint('station_information.json')).toBe(true);
+    expect(isAllowedDivvyEndpoint('free_bike_status.json')).toBe(false);
+    expect(isAllowedDivvyEndpoint('../../etc')).toBe(false);
+    expect(isAllowedDivvyEndpoint('')).toBe(false);
+  });
+
+  it('forwards a nested path to Lyft GBFS', async () => {
+    const res = mockRes();
+    await divvyHandler(
+      browserReq({
+        url: '/api/divvy/station_status.json',
+        query: { path: 'station_status.json' },
+      }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u === DISCOVERY_URL)).toBe(true);
+    expect(urls.some((u) => u.includes('gbfs/1.1/chi/en/station_status.json'))).toBe(true);
+  });
+
+  it('strips the ...path param Vercel appends for a catch-all route', async () => {
+    const res = mockRes();
+    await divvyHandler(
+      browserReq({
+        url: '/api/divvy/station_status.json?...path=station_status.json',
+        query: { '...path': 'station_status.json' },
+      }),
+      res,
+    );
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(urls.every((u) => !u.includes('...path') && !u.includes('path='))).toBe(true);
+    expect(urls.some((u) => u.endsWith('station_status.json'))).toBe(true);
+  });
+
+  it('rejects an endpoint outside the allowlist', async () => {
+    const res = mockRes();
+    await divvyHandler(
+      browserReq({ url: '/api/divvy/x', query: { path: 'x' } }),
+      res,
+    );
+    expect(res.statusCode).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('still refuses a caller that is not our page', async () => {
+    const req = browserReq({
+      url: '/api/divvy/station_status.json',
+      query: { path: 'station_status.json' },
+    });
+    delete req.headers.referer;
+    const res = mockRes();
+    await divvyHandler(req, res);
+    expect(res.statusCode).toBe(403);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('sets s-maxage=45 shared cache on 200', async () => {
+    const res = mockRes();
+    await divvyHandler(
+      browserReq({
+        url: '/api/divvy/station_status.json',
+        query: { path: 'station_status.json' },
+      }),
+      res,
+    );
+    expect(res.headers['cache-control']).toContain('s-maxage=45');
+  });
+
+  it('does not cache upstream errors', async () => {
+    fetchSpy.mockImplementation(async (url) => {
+      if (String(url) === DISCOVERY_URL) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          text: async () => JSON.stringify(DISCOVERY_DOC),
+          json: async () => DISCOVERY_DOC,
+        };
+      }
+      return {
+        ok: false,
+        status: 502,
+        headers: { get: () => 'application/json' },
+        text: async () => '{"error":"up"}',
+        json: async () => ({ error: 'up' }),
+      };
+    });
+    const res = mockRes();
+    await divvyHandler(
+      browserReq({
+        url: '/api/divvy/station_status.json',
+        query: { path: 'station_status.json' },
+      }),
+      res,
+    );
+    expect(res.statusCode).toBe(502);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('resolveFeedUrl caches discovery within TTL', async () => {
+    const cache = { urls: {}, until: 0 };
+    const a = await resolveFeedUrl('station_status.json', { fetchImpl: fetch, cache, now: () => 1_000 });
+    const b = await resolveFeedUrl('station_status.json', { fetchImpl: fetch, cache, now: () => 2_000 });
+    expect(a).toBe('https://gbfs.lyft.com/gbfs/1.1/chi/en/station_status.json');
+    expect(b).toBe(a);
+    const discCalls = fetchSpy.mock.calls.filter((c) => String(c[0]) === DISCOVERY_URL);
+    expect(discCalls).toHaveLength(1);
+  });
+
+  it('rejects a discovered host outside the allowlist', async () => {
+    const cache = { urls: {}, until: 0 };
+    fetchSpy.mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => ({
+        data: {
+          en: {
+            feeds: [{ name: 'station_status', url: 'https://evil.example.com/status.json' }],
+          },
+        },
+      }),
+      text: async () => '{}',
+    }));
+    const url = await resolveFeedUrl('station_status.json', { fetchImpl: fetch, cache, now: () => 1 });
+    expect(url).toBe(`${FALLBACK_BASE}/station_status.json`);
+    expect(url).not.toContain('evil');
   });
 });
 

@@ -48,6 +48,9 @@ export const TRAIN_POSITIONS_CACHE = 'public, max-age=0, s-maxage=5, stale-while
 /** Edge cache for station boards (client poll ~20s). */
 export const TRAIN_ARRIVALS_CACHE = 'public, max-age=0, s-maxage=15, stale-while-revalidate=20';
 
+/** Edge cache for Divvy GBFS status (client poll 60s, ttl 60). */
+export const DIVVY_STATUS_CACHE = 'public, max-age=0, s-maxage=45, stale-while-revalidate=30';
+
 /**
  * Host of a URL-ish header value, lowercased, or null when unparseable.
  * Origin arrives as `https://host[:port]`; Referer as a full URL.

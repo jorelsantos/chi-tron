@@ -26,6 +26,7 @@ import { createMapStage, TRACK_GLOW_LAYER_IDS } from './map-stage.js';
 import { createBusData } from './bus-data.js';
 import { createBoard } from './board.js';
 import { createBrowse } from './browse.js';
+import { DivvyEngine, normalizeStations } from './divvy.js';
 
 const statusEl = document.getElementById('status');
 const busStatusEl = document.getElementById('bus-status');
@@ -102,9 +103,48 @@ async function boot() {
 
   const engine = new TrainEngine(tracks);
   const busEngine = new BusEngine();
+  // Empty construct — cold open must not await bike bake (same rule as buses).
+  const divvyEngine = new DivvyEngine();
   const alertsEngine = new AlertsEngine();
   const arrivals = new ArrivalsSession();
   const busArrivals = new BusArrivalsSession();
+
+  let bikeStationsReady = false;
+  /** @type {Promise<void>|null} */
+  let bikeLoadInFlight = null;
+
+  function ensureBikeData() {
+    if (bikeStationsReady) return Promise.resolve();
+    if (bikeLoadInFlight) return bikeLoadInFlight;
+    bikeLoadInFlight = (async () => {
+      try {
+        const res = await fetch('/data/divvy-stations.json');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const raw = await res.json();
+        const stations = normalizeStations(raw);
+        divvyEngine.loadStations(stations);
+        bikeStationsReady = stations.length > 0;
+        if (bikeStationsReady) {
+          display.bikes = true;
+          divvyEngine.onStatus = () => {
+            // Re-render open bike browse/board when a poll lands.
+            browse.onBikeDataChange();
+            const live = divvyEngine.tick();
+            board.refreshBikeIfOpen((id) => live.find((s) => s.id === id));
+          };
+          divvyEngine.startLive();
+          hud.syncDisplayButtons();
+          browse.onBikeDataChange();
+        }
+      } catch (err) {
+        console.warn('[chi-tron] divvy-stations.json failed:', err?.message || err);
+        bikeStationsReady = false;
+        // Allow retry on next ensureBikeData() call.
+        bikeLoadInFlight = null;
+      }
+    })();
+    return bikeLoadInFlight;
+  }
 
   const trackKeys = Object.keys(tracks);
   const visibleLines = new Set(liveLineKeys());
@@ -112,6 +152,7 @@ async function boot() {
   const display = {
     trains: true,
     buses: false, // flipped on when the bus bake lands
+    bikes: false, // flipped on when divvy stations land
     cars: false,
     buildings: true,
     stations: true,
@@ -147,8 +188,26 @@ async function boot() {
   const browse = createBrowse({
     getStations,
     busData,
+    // Prefer live status join; fall back to static bake so the list works
+    // before the first 60s poll lands.
+    getBikeStations: () => {
+      const live = divvyEngine.tick();
+      if (live.length) return live;
+      return divvyEngine.stations.map((s) => ({
+        ...s,
+        classic: 0,
+        ebikes: 0,
+        docks: s.capacity || 0,
+        renting: true,
+        returning: true,
+        reportedAt: 0,
+      }));
+    },
+    bikeReady: () => bikeStationsReady,
+    ensureBikeData,
     onOpenStation: (station, opts) => board.openStation(station, opts),
     onOpenBusStop: (stop, opts) => board.openBusStop(stop, opts),
+    onOpenBikeStation: (station, opts) => board.openBikeStation(station, opts),
     isBoardOpen: () => board.isOpen(),
     closeBoard: () => board.close({ restoreBrowse: false }),
   });
@@ -190,8 +249,14 @@ async function boot() {
     // Let the basemap tiles win the network first, then pull the bus bake in
     // the background so map vehicles appear without the user asking. `idle`
     // is the honest signal; the timer covers a map that never settles.
-    map.once('idle', () => busData.ensureLoaded());
-    setTimeout(() => busData.ensureLoaded(), BUS_PREFETCH_FALLBACK_MS);
+    map.once('idle', () => {
+      busData.ensureLoaded();
+      ensureBikeData();
+    });
+    setTimeout(() => {
+      busData.ensureLoaded();
+      ensureBikeData();
+    }, BUS_PREFETCH_FALLBACK_MS);
   });
 
   // ---- vehicle follow ---------------------------------------------------
@@ -306,6 +371,10 @@ async function boot() {
         board.openStation(info.object);
         return;
       }
+      if (info.layer?.id === 'divvy-stations') {
+        board.openBikeStation(info.object, { source: 'map' });
+        return;
+      }
       if (info.layer?.id === 'glow-core') {
         const t = info.object;
         followVehicle('train', t.id, `${t.destNm || 'ORG'} · #${t.rn || '—'}`);
@@ -344,6 +413,7 @@ async function boot() {
 
     const trains = engine.tick();
     const buses = busData.mapReady ? busEngine.tick() : [];
+    const bikes = bikeStationsReady ? divvyEngine.tick() : [];
 
     if (followed) {
       const vehicle = trains.find((v) => v.id === followed.id);
@@ -372,7 +442,12 @@ async function boot() {
         buses,
         busTrailVersion: busEngine.trailVersion,
         viewportCenter: [center.lng, center.lat],
+        viewportBounds: (() => {
+          const b = map.getBounds();
+          return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+        })(),
         cars: [],
+        bikes,
         zoom: map.getZoom(),
         lineStatus: alertsEngine.lineStatus,
         accessibilityStations: alertsEngine.stationFlags,
@@ -389,10 +464,12 @@ async function boot() {
   window.__engine = engine;
   window.__busEngine = busEngine;
   window.__busData = busData;
+  window.__divvyEngine = divvyEngine;
   window.__hud = hud;
   window.__arrivals = arrivals;
   window.__alertsEngine = alertsEngine;
   window.__openStation = (station, opts) => board.openStation(station, opts);
+  window.__openBikeStation = (station, opts) => board.openBikeStation(station, opts);
 }
 
 boot();

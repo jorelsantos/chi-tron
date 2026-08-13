@@ -39,6 +39,7 @@ let buildingLayerIds = ['buildings-3d', 'buildings-3d-crown'];
 const DISPLAY_TOGGLES = [
   { key: 'trains', label: 'Trains' }, // line pulses this pass
   { key: 'buses', label: 'Buses' },
+  { key: 'bikes', label: 'Bikes' },
   { key: 'cars', label: 'Cars' },
   { key: 'buildings', label: 'Buildings' },
   // Stations toggle removed — rings hard-off for Tron grid aesthetic.

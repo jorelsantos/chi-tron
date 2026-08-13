@@ -17,11 +17,12 @@ import { escapeHtml, emptyState } from './dom.js';
 /**
  * @typedef {{
  *   source: 'map'|'stations'|'search',
- *   kind: 'train'|'bus',
+ *   kind: 'train'|'bus'|'bike',
  *   lineKey?: string|null,
  *   query?: string,
  *   busRt?: string,
  *   busRtdir?: string,
+ *   bikeStationId?: string,
  * }} BoardNav
  */
 
@@ -59,6 +60,8 @@ export function createBoard({
   let boardNav = null;
   /** @type {string|null} */
   let selectedStationId = null;
+  /** @type {object|null} last bike station shown (for live refresh) */
+  let openBikeStationData = null;
 
   function isOpen() {
     return Boolean(sheetEl?.classList.contains('open'));
@@ -251,10 +254,108 @@ export function createBoard({
     }
   }
 
+  /** @param {object} station */
+  function renderBikeBody(station) {
+    if (!sheetRows || !station) return;
+    const capacity = Number(station.capacity) || 0;
+    if (sheetMeta) sheetMeta.textContent = `DIVVY · CAP ${capacity}`;
+    const frag = document.createDocumentFragment();
+    if (station.renting === false) {
+      const flag = document.createElement('div');
+      flag.className = 'bike-flag';
+      flag.textContent = 'NOT RENTING';
+      frag.appendChild(flag);
+    }
+    if (station.docks === 0) {
+      const flag = document.createElement('div');
+      flag.className = 'bike-flag';
+      flag.textContent = 'DOCKS FULL';
+      frag.appendChild(flag);
+    }
+    if (station.returning === false) {
+      const flag = document.createElement('div');
+      flag.className = 'bike-flag';
+      flag.textContent = 'NOT ACCEPTING RETURNS';
+      frag.appendChild(flag);
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'bike-stat-grid';
+    const stats = [
+      ['Classic', station.classic ?? '—'],
+      ['E-bikes', station.ebikes ?? '—'],
+      ['Docks free', station.docks ?? '—'],
+      ['Capacity', capacity || '—'],
+    ];
+    for (const [label, value] of stats) {
+      const cell = document.createElement('div');
+      cell.className = 'bike-stat';
+      cell.innerHTML = `
+        <span class="bike-stat-label">${escapeHtml(label)}</span>
+        <span class="bike-stat-value">${escapeHtml(String(value))}</span>
+      `;
+      grid.appendChild(cell);
+    }
+    frag.appendChild(grid);
+    sheetRows.replaceChildren(frag);
+
+    if (station.reportedAt) {
+      // GBFS last_reported is unix seconds.
+      const ms = station.reportedAt > 1e12 ? station.reportedAt : station.reportedAt * 1000;
+      setUpdated(ms);
+    }
+  }
+
+  /**
+   * Bike dock board: classic / e-bikes / docks free / capacity.
+   * @param {{
+   *   id: string, name?: string, lat?: number, lon?: number, capacity?: number,
+   *   classic?: number, ebikes?: number, docks?: number,
+   *   renting?: boolean, returning?: boolean, reportedAt?: number
+   * }} station
+   * @param {{source?: 'map'|'stations'|'search', fly?: boolean}} [opts]
+   */
+  function openBikeStation(station, { source = 'stations', fly = true } = {}) {
+    if (!station?.id) return;
+    boardNav = {
+      source,
+      kind: 'bike',
+      bikeStationId: String(station.id),
+      lineKey: null,
+      query: '',
+    };
+    selectedStationId = null;
+    openBikeStationData = station;
+    arrivals.close();
+    busArrivals.close();
+
+    beginOpen(station.name || 'Bike station', `DIVVY · CAP ${Number(station.capacity) || 0}`);
+    renderBikeBody(station);
+
+    if (fly && Number.isFinite(station.lat) && Number.isFinite(station.lon)) {
+      stage.easeToPoint([station.lon, station.lat]);
+    }
+  }
+
+  /**
+   * Re-render an open bike board from a fresher live list entry.
+   * @param {(id: string) => object|undefined} [lookup]
+   */
+  function refreshBikeIfOpen(lookup) {
+    if (!isOpen() || boardNav?.kind !== 'bike' || !openBikeStationData) return;
+    const id = String(openBikeStationData.id);
+    const next = typeof lookup === 'function' ? lookup(id) : null;
+    if (next) {
+      openBikeStationData = next;
+      renderBikeBody(next);
+    }
+  }
+
   /** @param {{restoreBrowse?: boolean}} [opts] */
   function close({ restoreBrowse = false } = {}) {
     const nav = boardNav;
     selectedStationId = null;
+    openBikeStationData = null;
     arrivals.close();
     busArrivals.close();
     sheetEl?.classList.remove('open');
@@ -269,6 +370,8 @@ export function createBoard({
   return {
     openStation,
     openBusStop,
+    openBikeStation,
+    refreshBikeIfOpen,
     close,
     isOpen,
     resolveBoardLineKey,
