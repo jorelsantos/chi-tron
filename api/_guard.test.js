@@ -6,6 +6,7 @@ import {
   clientIp,
   createRateLimiter,
   createDailyBudget,
+  DAILY_BUDGET,
   isAllowedBusMethod,
   isRouteParam,
 } from './_guard.js';
@@ -151,6 +152,12 @@ describe('createRateLimiter', () => {
 });
 
 describe('createDailyBudget', () => {
+  it('exports a multi-instance-safe default ceiling', () => {
+    // Under ~10 warm instances this stays under CTA's 100k hard cap.
+    expect(DAILY_BUDGET).toBeLessThanOrEqual(10_000);
+    expect(DAILY_BUDGET).toBeGreaterThan(0);
+  });
+
   it('allows requests up to the ceiling and refuses past it', () => {
     const b = createDailyBudget({ ceiling: 2, now: () => 0 });
     expect(b.consume()).toBe(true);

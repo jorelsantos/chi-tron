@@ -19,15 +19,34 @@
 // Honest limitation: layers 2 and 3 hold state in module memory, so they are
 // per warm serverless instance, not global across the deployment. They bound
 // what one instance can spend and make casual scraping expensive; they are
-// not an exact distributed quota. If this ever needs to be exact, move the
-// two counters to Vercel KV / Upstash — the call sites here do not change.
+// not an exact distributed quota. Primary CTA cost control for train feeds is
+// edge caching on /api/tt and /api/arrivals (see TRAIN_*_CACHE below) — edge
+// hits never invoke this function. This budget is defense-in-depth for bus
+// and for cache misses. For a true global quota, move the counters to
+// Vercel KV / Upstash — the call sites here do not change.
 
 /** Requests per IP per window (layer 2). */
 export const RATE_LIMIT = 120;
 export const RATE_WINDOW_MS = 60_000;
 
-/** Upstream requests one warm instance may forward per local day (layer 3). */
-export const DAILY_BUDGET = 20_000;
+/**
+ * Upstream requests one warm instance may forward per local day (layer 3).
+ * Sized for multi-instance Vercel: ~8k × ~10 instances ≈ 80k, under CTA's
+ * 100k/day hard cap, with edge cache doing most of the train traffic.
+ * Was 20k when train proxies were no-store and every viewer hit origin.
+ */
+export const DAILY_BUDGET = 8_000;
+
+/**
+ * Edge cache for train positions. Client poll is 5s; one shared window per
+ * identical URL pins upstream cost regardless of concurrent viewers.
+ * `public` is required for Vercel's CDN to store; max-age=0 keeps the browser
+ * revalidating so the map still feels live.
+ */
+export const TRAIN_POSITIONS_CACHE = 'public, max-age=0, s-maxage=5, stale-while-revalidate=10';
+
+/** Edge cache for station boards (client poll ~20s). */
+export const TRAIN_ARRIVALS_CACHE = 'public, max-age=0, s-maxage=15, stale-while-revalidate=20';
 
 /**
  * Host of a URL-ish header value, lowercased, or null when unparseable.
