@@ -12,9 +12,6 @@ import { CAR_CAP } from './cars.js';
 import { mPerDegLon, M_PER_DEG_LAT } from './tracks.js';
 import { diamondRing, pickSnapLine } from './stations-rail.js';
 
-// Re-export under a neutral name so bike code does not import "buses".
-export { capBuses as capNearViewport } from './buses.js';
-
 // Neon palette anchored to official CTA brand colors (transitchicago.com
 // developers/branding, 2026) then boosted for cyberpunk readability on a
 // near-black stage. Official RGB → neon:
@@ -116,8 +113,22 @@ const CAR_TAILLIGHT_COLOR = [220, 35, 35];
 
 // Divvy: fixed docks. City zoom (~11) with every station drawn is clutter;
 // gate below LOOP, then reuse capBuses for the viewport budget.
-const BIKE_MIN_ZOOM = 12.5;
-const BIKE_CAP = 120;
+// Above cold-open 12.6 / CITY 11.2 so bikes do not paint the whole metro.
+const BIKE_MIN_ZOOM = 13.5;
+const BIKE_CAP = 400;
+const BIKE_BOUNDS_PAD = 0.02;
+
+/**
+ * @param {number} lon
+ * @param {number} lat
+ * @param {number[]|null} bounds [west, south, east, north]
+ * @param {number} pad degrees
+ */
+export function inPaddedBounds(lon, lat, bounds, pad = 0) {
+  if (!bounds || bounds.length < 4) return true;
+  const [w, s, e, n] = bounds;
+  return lon >= w - pad && lon <= e + pad && lat >= s - pad && lat <= n + pad;
+}
 // Lime/teal — sits between Green (~140°) and Blue (~195°).
 const BIKE_BASE = [40, 220, 160];
 
@@ -232,6 +243,7 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
     buses = [],
     busTrailVersion = 0,
     viewportCenter = [0, 0],
+    viewportBounds = null,
     cars = [],
     bikes = [],
     zoom = 0,
@@ -268,13 +280,14 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
   const headlights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, CAR_BODY_HALF_LEN_M));
   const taillights = shownCars.flatMap((c) => lightPair(c.pos, c.heading, -CAR_BODY_HALF_LEN_M));
 
-  // Divvy docks: zoom gate + nearest-to-viewport cap. Each station carries
-  // lat/lon (not pos) — map to the shape capBuses expects.
+  // Divvy docks: zoom gate → padded viewport filter → nearest-to-center cap.
+  // Bounds first so the cap does not carve a circle out of a rectangular view.
   const shownBikes =
     display.bikes && zoom >= BIKE_MIN_ZOOM
       ? capBuses(
           bikes
             .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon))
+            .filter((s) => inPaddedBounds(s.lon, s.lat, viewportBounds, BIKE_BOUNDS_PAD))
             .map((s) => ({ ...s, pos: [s.lon, s.lat] })),
           viewportCenter,
           BIKE_CAP,

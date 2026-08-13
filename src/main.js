@@ -442,6 +442,10 @@ async function boot() {
         buses,
         busTrailVersion: busEngine.trailVersion,
         viewportCenter: [center.lng, center.lat],
+        viewportBounds: (() => {
+          const b = map.getBounds();
+          return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+        })(),
         cars: [],
         bikes,
         zoom: map.getZoom(),

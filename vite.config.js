@@ -73,7 +73,8 @@ export default defineConfig(({ mode }) => {
           target: 'https://gbfs.lyft.com',
           changeOrigin: true,
           rewrite: (path) =>
-            path.replace(/^\/api\/divvy/, '/gbfs/2.3/chi/en'),
+            // Dev only. Prod resolves the version prefix from GBFS discovery.
+            path.replace(/^\/api\/divvy/, '/gbfs/1.1/chi/en'),
         },
       },
     },

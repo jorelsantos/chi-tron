@@ -8,6 +8,9 @@ import { Poller } from './poller.js';
 
 const POLL_MS = 60000;
 const STATUS_URL = '/api/divvy/station_status.json';
+const INFO_URL = '/api/divvy/station_information.json';
+/** Re-fetch station_information once if this fraction of status ids is unbaked. */
+export const BAKE_DRIFT_THRESHOLD = 0.02;
 
 /**
  * @typedef {{id: string, name: string, lat: number, lon: number, capacity: number}} DivvyStation
@@ -134,6 +137,8 @@ export class DivvyEngine {
     this.onStatus = () => {};
     this.failures = 0;
     this.poller = null;
+    /** @type {boolean} one self-heal fetch per session */
+    this.didSelfHeal = false;
   }
 
   /**
@@ -177,10 +182,61 @@ export class DivvyEngine {
     this.live = joinStatus(this.stations, statusRaw);
   }
 
+  /**
+   * Fraction of status ids that have no baked station.
+   * @param {unknown} statusRaw
+   * @returns {number}
+   */
+  driftRatio(statusRaw) {
+    const list = Array.isArray(statusRaw)
+      ? statusRaw
+      : Array.isArray(statusRaw?.data?.stations)
+        ? statusRaw.data.stations
+        : Array.isArray(statusRaw?.stations)
+          ? statusRaw.stations
+          : [];
+    const baked = new Set(this.stations.map((s) => s.id));
+    let n = 0;
+    let missing = 0;
+    for (const row of list) {
+      if (!row) continue;
+      const id = row.station_id != null ? String(row.station_id) : '';
+      if (!id) continue;
+      n += 1;
+      if (!baked.has(id)) missing += 1;
+    }
+    return n === 0 ? 0 : missing / n;
+  }
+
+  /**
+   * One-shot bake refresh if status ids drift past the threshold.
+   * @param {unknown} statusRaw
+   * @param {typeof fetch} [fetchImpl]
+   */
+  async maybeHeal(statusRaw, fetchImpl = fetch) {
+    if (this.didSelfHeal) return;
+    const drift = this.driftRatio(statusRaw);
+    if (drift <= BAKE_DRIFT_THRESHOLD) return;
+    this.didSelfHeal = true;
+    console.warn(
+      `[chi-tron] divvy bake drift ${(drift * 100).toFixed(1)}% — fetching station_information once`,
+    );
+    try {
+      const infoRes = await fetchImpl(INFO_URL);
+      if (infoRes.ok) {
+        const info = await infoRes.json();
+        this.loadStations(normalizeStations(info));
+      }
+    } catch (err) {
+      console.warn('[chi-tron] divvy self-heal failed:', err?.message || err);
+    }
+  }
+
   async #pollOnce(signal) {
     const res = await fetch(STATUS_URL, { signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    await this.maybeHeal(data);
     this.ingest(data);
   }
 
