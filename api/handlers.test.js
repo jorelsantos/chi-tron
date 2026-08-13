@@ -265,6 +265,26 @@ describe('train positions handler', () => {
     expect(target).not.toContain('attacker');
   });
 
+  it('sets a short shared cache so concurrent viewers collapse to one upstream', async () => {
+    const res = mockRes();
+    await ttHandler(browserReq({ url: '/api/tt?rt=Org' }), res);
+    expect(res.headers['cache-control']).toContain('s-maxage=5');
+    expect(res.headers['cache-control']).toContain('stale-while-revalidate');
+  });
+
+  it('does not cache upstream errors', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      headers: { get: () => 'application/json' },
+      text: async () => '{"error":"up"}',
+    });
+    const res = mockRes();
+    await ttHandler(browserReq({ url: '/api/tt?rt=Org' }), res);
+    expect(res.statusCode).toBe(502);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
   it('blocks an unauthorized caller before it ever touches CTA', async () => {
     const req = browserReq();
     delete req.headers.referer;
@@ -272,5 +292,15 @@ describe('train positions handler', () => {
     await ttHandler(req, res);
     expect(res.statusCode).toBe(403);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('train arrivals handler', () => {
+  it('sets a shared board cache on success', async () => {
+    const { default: arrivalsHandler } = await import('./arrivals.js');
+    const res = mockRes();
+    await arrivalsHandler(browserReq({ url: '/api/arrivals?mapid=41400&outputType=JSON' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toContain('s-maxage=15');
   });
 });

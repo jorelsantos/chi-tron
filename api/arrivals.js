@@ -1,7 +1,7 @@
 // Production proxy: CTA Train Tracker arrivals (ttarrivals).
 // Path must stay /api/arrivals (never /api/tt*) to avoid prefix collisions.
 
-import { guardRequest } from './_guard.js';
+import { guardRequest, TRAIN_ARRIVALS_CACHE } from './_guard.js';
 
 export default async function handler(req, res) {
   if (!guardRequest(req, res)) return;
@@ -21,7 +21,12 @@ export default async function handler(req, res) {
     const body = await upstream.text();
     res.status(upstream.status);
     res.setHeader('content-type', upstream.headers.get('content-type') || 'application/json');
-    res.setHeader('cache-control', 'no-store');
+    // Boards poll ~20s; short edge cache collapses concurrent boards for the
+    // same mapid/rt into one upstream. Errors stay uncached.
+    res.setHeader(
+      'cache-control',
+      upstream.status >= 200 && upstream.status < 300 ? TRAIN_ARRIVALS_CACHE : 'no-store',
+    );
     res.send(body);
   } catch (err) {
     res.status(502).json({ error: err?.message || 'upstream failed' });

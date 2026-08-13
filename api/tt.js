@@ -1,7 +1,7 @@
 // Production proxy: CTA Train Tracker positions (ttpositions).
 // Mirrors vite.config.js /api/tt — key stays in host env (CTA_KEY).
 
-import { guardRequest } from './_guard.js';
+import { guardRequest, TRAIN_POSITIONS_CACHE } from './_guard.js';
 
 export default async function handler(req, res) {
   // Public repo + key-injecting proxy: reject anything that is not our own
@@ -23,7 +23,14 @@ export default async function handler(req, res) {
     const body = await upstream.text();
     res.status(upstream.status);
     res.setHeader('content-type', upstream.headers.get('content-type') || 'application/json');
-    res.setHeader('cache-control', 'no-store');
+    // Collapse every viewer's identical 5s poll into one upstream call per
+    // window. Edge cache skips this function (and the origin guard) for the
+    // TTL — that is the deliberate trade for a hard cap on CTA key spend.
+    // Errors stay uncached so a brief CTA blip does not freeze for 5s.
+    res.setHeader(
+      'cache-control',
+      upstream.status >= 200 && upstream.status < 300 ? TRAIN_POSITIONS_CACHE : 'no-store',
+    );
     res.send(body);
   } catch (err) {
     res.status(502).json({ error: err?.message || 'upstream failed' });
