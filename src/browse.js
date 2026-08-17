@@ -1,6 +1,6 @@
 /**
- * The browse surface: Train | Bus | Bike → lines/routes/stations → board,
- * plus station search.
+ * The browse surface: TRAIN | BUS | BIKE icons on the tracker → lists → board,
+ * plus station search. Mode tabs live on the tracker titlebar.
  *
  * Three things worth knowing before editing:
  *
@@ -29,6 +29,14 @@ import {
   searchBusRoutes,
 } from './bus-catalog.js';
 import { browseRow, colorSwatch, routeBadge, lineOrbs, showEmpty } from './dom.js';
+import {
+  KIND_LABELS,
+  KINDS,
+  ROOT_TITLES,
+  kindFromRatio,
+  thumbIndexFromRatio,
+} from './browse-titles.js';
+import { bikeStatusMeta } from './bike-status.js';
 
 /**
  * @param {object} deps
@@ -75,7 +83,9 @@ export function createBrowse({
   const isOpen = () => Boolean(browseEl?.classList.contains('open'));
 
   function setTitle(text) {
-    if (browseTitle) browseTitle.textContent = text;
+    if (!browseTitle) return;
+    browseTitle.textContent = text || '';
+    browseTitle.hidden = !isOpen() || !text;
   }
 
   function setBack(visible) {
@@ -83,15 +93,17 @@ export function createBrowse({
   }
 
   function syncKindUi() {
-    for (const [id, active] of [
-      ['browse-kind-train', kind === 'train'],
-      ['browse-kind-bus', kind === 'bus'],
-      ['browse-kind-bike', kind === 'bike'],
-    ]) {
-      const el = document.getElementById(id);
+    for (const k of KINDS) {
+      const el = document.getElementById(`browse-kind-${k}`);
+      const active = kind === k;
       el?.classList.toggle('active', active);
       el?.setAttribute('aria-pressed', String(active));
+      el?.setAttribute('aria-selected', String(active));
+      el?.setAttribute('aria-label', KIND_LABELS[k]);
     }
+    const i = String(Math.max(0, KINDS.indexOf(kind)));
+    browseEl?.style.setProperty('--kind-i', i);
+    document.getElementById('browse-kind')?.style.setProperty('--kind-i', i);
   }
 
   /**
@@ -122,8 +134,8 @@ export function createBrowse({
       searchInput.placeholder = 'Route # or name…';
       searchInput.value = busQuery;
     }
-    if (!requireBusData('Bus routes')) return;
-    setTitle('Bus routes');
+    if (!requireBusData(ROOT_TITLES.bus)) return;
+    setTitle(ROOT_TITLES.bus);
     const routes = searchBusRoutes(busData.boardRoutes, busQuery);
     if (!routes.length) {
       showEmpty(browseList, busQuery.trim() ? 'NO MATCH' : 'NO LIVE ROUTES');
@@ -149,7 +161,7 @@ export function createBrowse({
   function renderTrainLines() {
     browseEl?.classList.remove('mode-search');
     browseEl?.classList.remove('mode-bus-list');
-    setTitle('Train lines');
+    setTitle(ROOT_TITLES.train);
     const lines = browseLinesLive();
     if (!lines.length) {
       showEmpty(browseList, 'NO LIVE LINES');
@@ -182,7 +194,7 @@ export function createBrowse({
       searchInput.placeholder = 'Station name…';
       searchInput.value = bikeQuery;
     }
-    setTitle('Bike stations');
+    setTitle(ROOT_TITLES.bike);
     if (!bikeReady()) {
       showEmpty(browseList, 'LOADING…');
       ensureBikeData();
@@ -203,13 +215,9 @@ export function createBrowse({
     const shown = list.slice(0, 200);
     browseList.replaceChildren(
       ...shown.map((st) => {
-        const bikes = (st.classic || 0) + (st.ebikes || 0);
-        const meta = st.renting === false
-          ? 'NOT RENTING'
-          : `${bikes} BIKES · ${st.docks ?? '—'} DOCKS`;
         return browseRow({
           name: st.name || st.id,
-          meta,
+          meta: bikeStatusMeta(st),
           chevron: true,
           onClick: () => onOpenBikeStation(st, { source: 'stations' }),
         });
@@ -327,7 +335,7 @@ export function createBrowse({
     mode = 'search';
     kind = 'train';
     syncKindUi();
-    setTitle('Search stations');
+    setTitle(ROOT_TITLES.search);
     setBack(false);
     browseEl?.classList.add('mode-search');
     browseList.replaceChildren();
@@ -359,11 +367,14 @@ export function createBrowse({
     browseEl?.classList.remove('mode-search');
     browseEl?.classList.remove('mode-bus-list');
     browseEl?.classList.remove('mode-bike-list');
-    document.getElementById('fab-lines')?.setAttribute('aria-pressed', 'false');
     document.getElementById('fab-search')?.setAttribute('aria-pressed', 'false');
     if (searchInput) searchInput.value = '';
     busQuery = '';
     bikeQuery = '';
+    if (browseTitle) {
+      browseTitle.textContent = '';
+      browseTitle.hidden = true;
+    }
   }
 
   /** @param {'lines'|'directions'|'stations'|'search'} [nextMode] */
@@ -377,7 +388,6 @@ export function createBrowse({
     browseEl?.classList.toggle('mode-search', nextMode === 'search' && kind === 'train');
     browseEl?.classList.toggle('mode-bus-list', showBusSearch);
     browseEl?.classList.toggle('mode-bike-list', showBikeSearch);
-    document.getElementById('fab-lines')?.setAttribute('aria-pressed', String(nextMode !== 'search'));
     document.getElementById('fab-search')?.setAttribute('aria-pressed', String(nextMode === 'search'));
     syncKindUi();
     if (nextMode === 'lines') {
@@ -451,20 +461,101 @@ export function createBrowse({
     }
     if (mode === 'stations' || mode === 'directions') renderLines();
   });
-  document.getElementById('browse-kind-train')?.addEventListener('click', () => {
-    kind = 'train';
+  function setKind(next) {
+    if (!KINDS.includes(next)) {
+      syncKindUi();
+      return;
+    }
+    const sameRoot = next === kind && isOpen() && mode === 'lines';
+    kind = next;
+    if (kind === 'bus') busData.ensureLoaded();
+    if (kind === 'bike') ensureBikeData();
+    if (sameRoot) {
+      close();
+      syncKindUi();
+      return;
+    }
     open('lines');
+  }
+
+  document.getElementById('browse-kind-train')?.addEventListener('click', () => setKind('train'));
+  document.getElementById('browse-kind-bus')?.addEventListener('click', () => setKind('bus'));
+  document.getElementById('browse-kind-bike')?.addEventListener('click', () => setKind('bike'));
+
+  const kindEl = document.getElementById('browse-kind');
+  let slideOn = false;
+  let slideMoved = false;
+  let slideY = 0;
+  let suppressKindClick = false;
+  const ratioFromY = (y) => {
+    const box = kindEl?.getBoundingClientRect();
+    if (!box || box.height <= 0) return KINDS.indexOf(kind) / 3 + 1 / 6;
+    return (y - box.top) / box.height;
+  };
+  kindEl?.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    slideOn = true;
+    slideMoved = false;
+    slideY = e.clientY;
+    kindEl.setPointerCapture?.(e.pointerId);
+    kindEl.classList.add('is-sliding');
   });
-  document.getElementById('browse-kind-bus')?.addEventListener('click', () => {
-    kind = 'bus';
-    // Start the (large) bake download the moment the user shows bus intent.
-    busData.ensureLoaded();
-    open('lines');
+  kindEl?.addEventListener('pointermove', (e) => {
+    if (!slideOn) return;
+    if (Math.abs(e.clientY - slideY) >= 8) slideMoved = true;
+    if (!slideMoved) return;
+    kindEl.style.setProperty('--kind-i', String(thumbIndexFromRatio(ratioFromY(e.clientY))));
   });
-  document.getElementById('browse-kind-bike')?.addEventListener('click', () => {
-    kind = 'bike';
-    ensureBikeData();
-    open('lines');
+  const endKindSlide = (e) => {
+    if (!slideOn) return;
+    slideOn = false;
+    kindEl?.classList.remove('is-sliding');
+    suppressKindClick = true;
+    setKind(kindFromRatio(ratioFromY(e.clientY)));
+  };
+  kindEl?.addEventListener('pointerup', endKindSlide);
+  kindEl?.addEventListener('pointercancel', () => {
+    slideOn = false;
+    kindEl?.classList.remove('is-sliding');
+    syncKindUi();
+  });
+  kindEl?.addEventListener('click', (e) => {
+    if (!suppressKindClick) return;
+    e.preventDefault();
+    e.stopPropagation();
+    suppressKindClick = false;
+  }, true);
+  kindEl?.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const i = KINDS.indexOf(kind);
+    const n = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? i + 1 : i - 1;
+    if (n < 0 || n >= KINDS.length) return;
+    setKind(KINDS[n]);
+    document.getElementById(`browse-kind-${KINDS[n]}`)?.focus();
+  });
+
+  let swipeX = 0;
+  let swipeY = 0;
+  let swipeOn = false;
+  browseEl?.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    swipeOn = true;
+    swipeX = e.clientX;
+    swipeY = e.clientY;
+  });
+  browseEl?.addEventListener('pointerup', (e) => {
+    if (!swipeOn) return;
+    swipeOn = false;
+    const dx = e.clientX - swipeX;
+    const dy = e.clientY - swipeY;
+    if (Math.abs(dx) < 48 || Math.abs(dx) <= Math.abs(dy)) return;
+    const i = KINDS.indexOf(kind);
+    if (dx < 0 && i < KINDS.length - 1) setKind(KINDS[i + 1]);
+    else if (dx > 0 && i > 0) setKind(KINDS[i - 1]);
+  });
+  browseEl?.addEventListener('pointercancel', () => {
+    swipeOn = false;
   });
   searchInput?.addEventListener('input', () => {
     if (kind === 'bus' && mode === 'lines') {

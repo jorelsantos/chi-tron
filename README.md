@@ -12,9 +12,10 @@ Live **all eight L lines**: vehicle positions, single-line arrival boards
 - **Map first:** full-bleed Grid-in-the-Fog stage; chrome floats on top.
 - **Live trains:** CTA `ttpositions` for all lines in `LINE_DEFS` (`src/catalog.js`) — **one** multi-`rt` poll (~5s), not one poll per line.
 - **Station board:** open a stop from a **line** list → arrivals for **that line only** (Orange → Roosevelt = Orange; Red → Roosevelt = Red). List orbs show which lines serve the stop.
-- **Browse:** Lines → stations (CTA-style multi-color orbs) → board; search across the system.
-- **You:** ◎ FAB enables geolocation; follow-me recenters; pan breaks follow (Maps law).
-- **Buses (full tracker):** All ~126 CTA routes — Train|Bus → search route → **direction** → stops → predictions. Map vehicles only for **mapLive** marquee (~21 high-frequency routes) so poll budget and density stay sane.
+- **Browse:** Bottom-right TRAIN / BUS / BIKE icons → Train Rides / Bus Routes / Bike Stations → board. Search is top-left.
+- **You:** Locate under the kind stack; follow-me recenters; pan breaks follow (Maps law).
+- **Buses (full tracker):** All ~126 CTA routes — Bus Routes → search route → **direction** → stops → predictions. Map vehicles only for **mapLive** marquee (~21 high-frequency routes) so poll budget and density stay sane.
+- **Bikes:** Divvy GBFS list. Bikes green / empty red. Docks orange / empty red.
 - **Bake:** `npm run patterns` → `patterns.json` (map polylines + all `routeDirections`) + `bus-routes.json` (catalog).
 
 ### Cold open
@@ -90,3 +91,9 @@ vercel --prod
 ## Stretch
 
 Tracker-first shell · focus-route map poll · Divvy · PWA.
+
+Pinned city feeds (after Divvy): ADS-B, Travel Midwest speeds + cams, weather/lake, Pulse (311 + Block Club). See `docs/briefs/city-feeds.md`.
+
+3D research (not in main): Grok 4.6 is good at hero meshes and small worlds, not a city twin. See `docs/briefs/grok-46-3d.md`.
+
+Evidence for both lives in `docs/research/`.

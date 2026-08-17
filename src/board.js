@@ -13,6 +13,7 @@ import { groupBusByDirection } from './bus-arrivals.js';
 import { lineDefByKey, lineColor, liveLineKeys, cleanStationName } from './catalog.js';
 import { busRouteDef } from './bus-catalog.js';
 import { escapeHtml, emptyState } from './dom.js';
+import { bikeCountTone, dockCountTone } from './bike-status.js';
 
 /**
  * @typedef {{
@@ -262,37 +263,41 @@ export function createBoard({
     const frag = document.createDocumentFragment();
     if (station.renting === false) {
       const flag = document.createElement('div');
-      flag.className = 'bike-flag';
+      flag.className = 'bike-flag is-bad';
       flag.textContent = 'NOT RENTING';
       frag.appendChild(flag);
     }
     if (station.docks === 0) {
       const flag = document.createElement('div');
-      flag.className = 'bike-flag';
+      flag.className = 'bike-flag is-bad';
       flag.textContent = 'DOCKS FULL';
       frag.appendChild(flag);
     }
     if (station.returning === false) {
       const flag = document.createElement('div');
-      flag.className = 'bike-flag';
+      flag.className = 'bike-flag is-bad';
       flag.textContent = 'NOT ACCEPTING RETURNS';
       frag.appendChild(flag);
     }
 
     const grid = document.createElement('div');
     grid.className = 'bike-stat-grid';
+    const classicTone = bikeCountTone(station.classic);
+    const eTone = bikeCountTone(station.ebikes);
+    const dockTone = dockCountTone(station.docks);
     const stats = [
-      ['Classic', station.classic ?? '—'],
-      ['E-bikes', station.ebikes ?? '—'],
-      ['Docks free', station.docks ?? '—'],
-      ['Capacity', capacity || '—'],
+      ['Classic', station.classic ?? '—', classicTone],
+      ['E-bikes', station.ebikes ?? '—', eTone],
+      ['Docks free', station.docks ?? '—', dockTone],
+      ['Capacity', capacity || '—', ''],
     ];
-    for (const [label, value] of stats) {
+    for (const [label, value, tone] of stats) {
       const cell = document.createElement('div');
       cell.className = 'bike-stat';
+      const toneClass = tone ? ` is-${tone}` : '';
       cell.innerHTML = `
         <span class="bike-stat-label">${escapeHtml(label)}</span>
-        <span class="bike-stat-value">${escapeHtml(String(value))}</span>
+        <span class="bike-stat-value${toneClass}">${escapeHtml(String(value))}</span>
       `;
       grid.appendChild(cell);
     }

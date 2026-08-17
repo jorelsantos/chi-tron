@@ -21,12 +21,13 @@ import { BusArrivalsSession } from './bus-arrivals.js';
 import { startWatch, nearestStation, walkMinutes } from './geolocation.js';
 import { snapStationsToRails } from './stations-rail.js';
 import { liveLineKeys, liveStationsUnion } from './catalog.js';
-import { activeSurface, listFabAction, searchFabAction, dismissTopAction } from './ui-nav.js';
+import { activeSurface, searchFabAction, dismissTopAction } from './ui-nav.js';
 import { createMapStage, TRACK_GLOW_LAYER_IDS } from './map-stage.js';
 import { createBusData } from './bus-data.js';
 import { createBoard } from './board.js';
 import { createBrowse } from './browse.js';
 import { DivvyEngine, normalizeStations } from './divvy.js';
+import { alignTrainToRibbon } from './train-consist.js';
 
 const statusEl = document.getElementById('status');
 const busStatusEl = document.getElementById('bus-status');
@@ -334,19 +335,6 @@ async function boot() {
     }
   });
 
-  document.getElementById('fab-lines')?.addEventListener('click', () => {
-    const act = listFabAction(currentSurface());
-    if (act === 'close-browse') {
-      browse.close();
-      return;
-    }
-    if (act === 'board-to-browse') {
-      board.close({ restoreBrowse: false });
-      browse.setKind('train');
-    }
-    browse.open('lines');
-  });
-
   document.getElementById('fab-search')?.addEventListener('click', () => {
     const act = searchFabAction(currentSurface(), browse.isSearch());
     if (act === 'close-browse') browse.close();
@@ -368,16 +356,16 @@ async function boot() {
         return;
       }
       if (info.layer?.id === 'station-ring') {
-        board.openStation(info.object);
+        board.openStation(info.object, { source: 'map', lineKey: info.object.railLine });
         return;
       }
       if (info.layer?.id === 'divvy-stations') {
         board.openBikeStation(info.object, { source: 'map' });
         return;
       }
-      if (info.layer?.id === 'glow-core') {
+      if (info.layer?.id === 'train-cars-core') {
         const t = info.object;
-        followVehicle('train', t.id, `${t.destNm || 'ORG'} · #${t.rn || '—'}`);
+        followVehicle('train', t.id, `${t.destNm || t.line || 'L'} · #${t.rn || '—'}`);
       }
     },
   });
@@ -417,7 +405,7 @@ async function boot() {
 
     if (followed) {
       const vehicle = trains.find((v) => v.id === followed.id);
-      if (vehicle?.pos) map.setCenter(vehicle.pos);
+      if (vehicle?.pos) map.setCenter(alignTrainToRibbon(vehicle, map.getZoom()).pos);
       else releaseFollow();
     }
 

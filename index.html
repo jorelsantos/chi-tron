@@ -30,7 +30,7 @@
       --glass-sat: 1.05;
       --glass-bright: 1.0;
       /* Radius ladder: pill / lg / md / sm / xs — reuse --glass-radius* names */
-      --glass-radius: 20px;         /* lg — main sheets */
+      --glass-radius: 14px;         /* lg — main sheets */
       --glass-radius-sm: 14px;      /* md — cards, rows, inputs */
       --glass-radius-xs: 8px;       /* sm — compact chrome */
       --glass-radius-2xs: 4px;      /* xs — micro controls */
@@ -49,7 +49,9 @@
       --type-tertiary: rgba(180, 200, 230, 0.58);
       --mins-size: 38px;
       --cta-orange: #f9461c;
-      --ease-sheet: 0.38s cubic-bezier(0.22, 1.15, 0.36, 1);
+      --ease-sheet: 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+      --status-ok: #3bff6f;
+      --status-bad: #ff3b4a;
       --ease-press: 0.16s cubic-bezier(0.22, 1, 0.36, 1);
       --safe-b: max(16px, env(safe-area-inset-bottom));
       --safe-t: max(10px, env(safe-area-inset-top));
@@ -96,27 +98,59 @@
     /* HUD chrome — never intercepts map interaction */
     .hud { position: absolute; z-index: 10; pointer-events: none; font-family: var(--font-mono); }
 
-    /* Compact mobile header: glass pill, not floating tall type */
-    #wordmark {
-      top: max(10px, env(safe-area-inset-top));
-      left: max(12px, env(safe-area-inset-left));
+    /* Compact header: search + wordmark. Mode icons live in #dock-right. */
+    #hud-top {
+      top: max(8px, env(safe-area-inset-top));
+      left: max(10px, env(safe-area-inset-left));
+      right: auto;
       z-index: 16;
-      display: inline-flex;
+      pointer-events: none;
+      display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 9px 12px 9px 14px;
-      border-radius: var(--glass-radius-sm);
-      background: rgba(0, 0, 0, 0.62);
+      gap: 8px;
+    }
+    #hud-bar,
+    #browse-kind,
+    #fab-search,
+    #fab-locate {
+      background: rgba(0, 0, 0, 0.68);
       -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(1.1);
       backdrop-filter: blur(var(--glass-blur-md)) saturate(1.1);
       box-shadow:
         0 0 0 0.5px var(--glass-white-3) inset,
         0 8px 28px rgba(0, 0, 0, 0.45);
-      font-size: 13px;
+    }
+    #hud-bar {
+      pointer-events: auto;
+      display: flex;
+      align-items: stretch;
+      min-height: 40px;
+      padding: 2px;
+      border-radius: var(--glass-radius-sm);
+      overflow: hidden;
+    }
+    #hud-top #fab-search {
+      pointer-events: auto;
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+    }
+    #hud-top #fab-search .fab-icon {
+      width: 18px;
+      height: 18px;
+    }
+    #wordmark {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      flex-shrink: 0;
+      font-size: 12px;
       font-weight: 600;
       letter-spacing: 0.16em;
       color: var(--neon-cyan);
-      text-shadow: 0 0 10px rgba(0, 212, 255, 0.55);
+      text-shadow: 0 0 10px rgba(0, 212, 255, 0.45);
       line-height: 1;
     }
     #wordmark small {
@@ -124,7 +158,7 @@
       align-items: center;
       gap: 5px;
       margin: 0;
-      padding: 3px 7px;
+      padding: 2px 6px;
       border-radius: var(--glass-radius-pill);
       font-size: 8px;
       font-weight: 600;
@@ -356,13 +390,10 @@
     }
     /* Hide chrome when board open so board is clean */
     @media (max-width: 899px) {
-      body:has(#station-sheet.open) #wordmark,
+      body:has(#station-sheet.open) #hud-top,
       body:has(#station-sheet.open) #compass,
       body:has(#station-sheet.open) .map-view-controls {
         opacity: 0; pointer-events: none;
-      }
-      body:has(#browse-sheet.open) #wordmark {
-        opacity: 0.35;
       }
     }
 
@@ -507,7 +538,7 @@
       pointer-events: none;
       z-index: 2;
       border-radius: calc(var(--glass-radius) - var(--glass-radius-xs));
-      opacity: 0.9;
+      opacity: 0.36;
       background:
         linear-gradient(var(--tron-bracket, var(--tron-cyan)), var(--tron-bracket, var(--tron-cyan))) top left / 14px 1.5px no-repeat,
         linear-gradient(var(--tron-bracket, var(--tron-cyan)), var(--tron-bracket, var(--tron-cyan))) top left / 1.5px 14px no-repeat,
@@ -521,7 +552,7 @@
     .lg-org > .tron-brackets { --tron-bracket: var(--tron-org); }
     .lg-cyan > .tron-brackets { --tron-bracket: var(--tron-cyan); }
 
-    /* Map view: 2D / 3D / LIVE — top-right, clear of header */
+    /* Map view: 2D / 3D — top-right, clear of header */
     .map-view-controls {
       position: absolute; z-index: 14;
       right: var(--safe-r);
@@ -550,23 +581,16 @@
         0 0 0 0.5px var(--glass-white-5) inset,
         0 0 20px rgba(0, 212, 255, 0.22) !important;
     }
-    .map-view-live {
-      letter-spacing: 0.16em;
-      color: rgba(100, 255, 160, 0.85);
-    }
-    .map-view-live:active {
-      filter: brightness(1.2);
-    }
     @media (max-width: 720px) {
       #sidebar { display: none !important; }
     }
 
-    /* FAB stack — thumb zone (large, readable glyphs) */
-    #fab-stack {
+    /* Thumb dock: kind column + isolated locate */
+    #dock-right {
       position: absolute; z-index: 15;
       right: var(--safe-r);
       bottom: var(--safe-b);
-      display: flex; flex-direction: column; gap: 14px;
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
       pointer-events: none;
     }
     .fab {
@@ -585,9 +609,9 @@
       -webkit-tap-highlight-color: transparent;
     }
     .fab .fab-icon {
-      width: 28px; height: 28px; display: block;
+      width: 22px; height: 22px; display: block;
       stroke: currentColor; fill: none;
-      stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round;
+      stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
       pointer-events: none;
       transition: filter var(--ease-press), transform var(--ease-press);
     }
@@ -599,8 +623,7 @@
       filter: brightness(1.28) saturate(1.15);
     }
     .fab:active .fab-icon {
-      filter: drop-shadow(0 0 6px currentColor);
-      transform: scale(1.06);
+      transform: scale(1.04);
     }
     .fab[aria-pressed="true"] {
       filter: brightness(1.14);
@@ -610,11 +633,7 @@
         0 8px 28px rgba(0, 0, 0, 0.4),
         0 0 32px rgba(0, 212, 255, 0.42) !important;
     }
-    #fab-locate { color: #9ec5ff; }
-    #fab-lines {
-      font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
-    }
-    #fab-lines .fab-icon { width: 26px; height: 26px; }
+    #fab-locate { color: #9ec5ff; pointer-events: auto; }
     #fab-search { color: #e8f4ff; }
 
     #nearest-chip, #loc-chip {
@@ -639,13 +658,13 @@
       top: calc(var(--safe-t) + min(68vh, 560px) + 10px);
     }
     /* Maps pattern: board owns thumb zone — fade FABs when open */
-    body:has(#station-sheet.open) #fab-stack {
+    body:has(#station-sheet.open) #dock-right {
       opacity: 0.28;
       pointer-events: none;
       transform: translateY(6px);
       transition: opacity 0.25s ease, transform 0.25s ease;
     }
-    #fab-stack {
+    #dock-right {
       transition: opacity 0.25s ease, transform 0.25s ease;
     }
 
@@ -723,7 +742,7 @@
     }
     #sheet-back, #sheet-close {
       border: none;
-      border-radius: var(--glass-radius-pill);
+      border-radius: var(--glass-radius-xs);
       background: var(--glass-white-2);
       color: var(--type-primary);
       font-family: inherit; font-size: 15px; font-weight: 500;
@@ -904,8 +923,8 @@
     /* Browse sheet — bottom liquid glass */
     #browse-sheet {
       position: absolute; z-index: 17;
-      left: var(--safe-l); right: var(--safe-r);
-      bottom: calc(var(--safe-b) + 84px);
+      left: var(--safe-l); right: calc(var(--safe-r) + 76px);
+      bottom: calc(var(--safe-b) + 80px);
       max-height: 58vh;
       transform: translateY(22px) scale(0.96);
       opacity: 0;
@@ -923,56 +942,103 @@
       opacity: 1;
       pointer-events: auto;
     }
+    #browse-close { margin-left: auto; }
     #browse-header {
       display: flex; align-items: center; gap: 8px;
-      padding: 14px 14px 10px;
-      border-bottom: 0.5px solid rgba(0, 212, 255, 0.18);
+      padding: 10px 14px 4px;
+      border-bottom: 0.5px solid var(--glass-white-3);
       box-shadow: 0 1px 0 var(--glass-white-1);
     }
     #browse-back, #browse-close {
-      border: none; border-radius: var(--glass-radius-pill);
+      border: none; border-radius: var(--glass-radius-xs);
       background: var(--glass-white-2); color: var(--type-primary);
       font-size: 14px; font-weight: 600;
-      min-height: 36px; min-width: 36px; padding: 0 10px; cursor: pointer;
+      min-height: 36px; min-width: 36px; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer;
       font-family: inherit;
       box-shadow: 0 0 0 0.5px var(--glass-white-3) inset;
       transition: background var(--ease-press), transform var(--ease-press), box-shadow var(--ease-press);
     }
+    #browse-back[hidden] { display: none; }
     #browse-back:active, #browse-close:active {
       transform: scale(0.92);
       background: var(--glass-white-4);
     }
     #browse-title {
-      flex: 1; font-size: 16px; font-weight: 700; letter-spacing: -0.01em;
-    }
-    #browse-kind {
-      display: flex;
-      gap: 0;
-      margin: 0 14px 8px;
-      padding: 3px;
-      border-radius: var(--glass-radius-sm);
-      background: rgba(0, 0, 0, 0.28);
-      box-shadow: 0 0 0 0.5px var(--glass-white-3) inset;
-    }
-    #browse-kind button {
-      flex: 1;
-      border: none;
-      border-radius: var(--glass-radius-xs);
-      padding: 10px 8px;
-      font-family: inherit;
+      font-family: var(--font-mono);
       font-size: 12px;
-      font-weight: 650;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.12em;
       color: var(--type-secondary);
-      background: transparent;
-      cursor: pointer;
-      min-height: 40px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1;
+      flex: 1;
+      min-width: 0;
     }
+    #browse-title[hidden] { display: none; }
+    #browse-kind {
+      pointer-events: auto;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: var(--fab-size);
+      margin: 0;
+      padding: 3px;
+      border-radius: 20px;
+      touch-action: pan-y;
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: grab;
+    }
+    #browse-kind.is-sliding { cursor: grabbing; }
+    #browse-kind-thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      right: 3px;
+      height: calc((100% - 6px) / 3);
+      border-radius: 16px;
+      background: var(--glass-white-3);
+      transform: translateY(calc(var(--kind-i, 0) * 100%));
+      transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+      pointer-events: none;
+    }
+    #browse-kind.is-sliding #browse-kind-thumb { transition: none; }
+    #browse-kind button {
+      position: relative;
+      z-index: 1;
+      flex: 1 1 58px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 16px;
+      padding: 0;
+      color: var(--type-tertiary);
+      background: transparent;
+      cursor: inherit;
+      min-height: 58px;
+      width: 100%;
+    }
+    #browse-kind button:hover { color: var(--type-secondary); }
     #browse-kind button.active {
       color: #fff;
-      background: var(--glass-white-3);
-      box-shadow: 0 0 0 0.5px rgba(0, 212, 255, 0.35) inset, 0 0 16px rgba(0, 212, 255, 0.12);
+      background: transparent;
+      box-shadow: none;
+    }
+    #browse-kind .kind-icon {
+      width: 28px;
+      height: 28px;
+      display: block;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
     }
     .bus-route-badge {
       display: flex;
@@ -1001,8 +1067,6 @@
     .arr-orb-bus {
       --orb-rgb: 90, 150, 230;
     }
-    /* Station search hides kind tabs; bus/bike filter lists keep the toggle. */
-    #browse-sheet.mode-search:not(.mode-bus-list):not(.mode-bike-list) #browse-kind { display: none; }
     #browse-sheet.mode-bike-list #browse-search-input { display: block; }
     .arr-orb-bike {
       --orb-rgb: 40, 220, 160;
@@ -1091,7 +1155,7 @@
     .browse-row:disabled { opacity: 0.38; cursor: not-allowed; }
     .browse-swatch {
       width: 12px; height: 32px; border-radius: var(--glass-radius-2xs); flex-shrink: 0;
-      box-shadow: 0 0 12px color-mix(in srgb, currentColor 55%, transparent);
+      box-shadow: 0 0 6px color-mix(in srgb, currentColor 30%, transparent);
     }
     /* CTA-style multi-line orbs on station rows */
     .line-orbs {
@@ -1106,7 +1170,7 @@
       height: 28px;
       border-radius: var(--glass-radius-2xs);
       flex-shrink: 0;
-      box-shadow: 0 0 8px color-mix(in srgb, currentColor 40%, transparent);
+      box-shadow: 0 0 4px color-mix(in srgb, currentColor 22%, transparent);
     }
     .line-orb-more {
       font-size: 10px;
@@ -1152,8 +1216,27 @@
       margin-left: auto; font-size: 11px; letter-spacing: 0.06em;
       color: var(--type-secondary); font-weight: 600;
     }
+    .meta-group {
+      display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+    }
+    .meta-part.is-ok, .bike-stat-value.is-ok { color: var(--status-ok); }
+    .meta-part.is-bad, .bike-stat-value.is-bad { color: var(--status-bad); }
+    .meta-part.is-dock, .bike-stat-value.is-dock { color: var(--tron-org); }
+    .meta-part.is-dim { color: var(--type-tertiary); }
+    .bike-flag.is-bad {
+      color: var(--status-bad);
+      background: rgba(255, 59, 74, 0.14);
+      box-shadow: 0 0 0 0.5px rgba(255, 59, 74, 0.4) inset;
+    }
     .browse-chevron {
-      color: var(--type-tertiary); font-size: 18px; font-weight: 300;
+      color: var(--type-tertiary);
+      display: inline-flex; align-items: center;
+    }
+    .browse-chevron .icon,
+    .icon {
+      width: 16px; height: 16px; display: block;
+      stroke: currentColor; fill: none;
+      stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
     }
 
     @media (min-width: 900px) {
@@ -1172,6 +1255,7 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
+      #browse-kind-thumb { transition: none; }
       #station-sheet, #browse-sheet, .fab {
         transition: opacity 0.15s ease;
       }
@@ -1215,11 +1299,20 @@
   <div id="map"></div>
   <div id="scanlines"></div>
   <div id="vignette"></div>
-  <div class="hud" id="wordmark">CHI-TRON<small>LIVE</small></div>
+  <div class="hud" id="hud-top">
+    <button type="button" class="fab" id="fab-search" title="Search stations" aria-label="Search stations">
+      <svg class="fab-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="10.5" cy="10.5" r="5.25" />
+        <path d="M14.6 14.6 L19.2 19.2" />
+      </svg>
+    </button>
+    <div id="hud-bar">
+      <div id="wordmark">CHI-TRON<small>LIVE</small></div>
+    </div>
+  </div>
   <div id="map-view-controls" class="map-view-controls" role="group" aria-label="Map view">
     <button type="button" class="map-view-btn lg" id="btn-view-2d" aria-pressed="true">2D</button>
     <button type="button" class="map-view-btn lg" id="btn-view-3d" aria-pressed="false">3D</button>
-    <button type="button" class="map-view-btn lg map-view-live" id="btn-live-overview" title="Show live trains and buses">LIVE</button>
   </div>
   <div class="hud" id="clock">--:--:--</div>
   <div class="hud" id="status">BOOT</div>
@@ -1285,25 +1378,47 @@
     </svg>
   </div>
 
-  <div id="fab-stack">
-    <button type="button" class="fab lg lg-cyan" id="fab-search" title="Search stations" aria-label="Search stations">
+  <div id="dock-right">
+    <div id="browse-kind" role="tablist" aria-label="Train, bus, bike">
+      <span id="browse-kind-thumb" aria-hidden="true"></span>
+      <button type="button" role="tab" id="browse-kind-train" class="active" aria-label="TRAIN" aria-selected="true" aria-pressed="true">
+        <svg class="kind-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 2.5 H15 M12 2.5 V5" />
+          <path d="M6 5 H18 V16.5 H6 Z" />
+          <path d="M8 7 H16 V12 H8 Z" />
+          <circle cx="8.75" cy="14.25" r="1.1" />
+          <circle cx="15.25" cy="14.25" r="1.1" />
+          <path d="M7 16.5 L4.5 21 M17 16.5 L19.5 21" />
+          <path d="M3 21 H21" />
+        </svg>
+      </button>
+      <button type="button" role="tab" id="browse-kind-bus" aria-label="BUS" aria-selected="false" aria-pressed="false">
+        <svg class="kind-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 3.5 H19 V16.5 H5 Z" />
+          <path d="M5 3.5 H19 V7 H5 Z" />
+          <path d="M7 8.25 H17 V13 H7 Z" />
+          <circle cx="8" cy="14.75" r="1.05" />
+          <circle cx="16" cy="14.75" r="1.05" />
+          <path d="M3.25 7 H5 M19 7 H20.75" />
+          <circle cx="8" cy="19.25" r="2.15" />
+          <circle cx="16" cy="19.25" r="2.15" />
+        </svg>
+      </button>
+      <button type="button" role="tab" id="browse-kind-bike" aria-label="BIKE" aria-selected="false" aria-pressed="false">
+        <svg class="kind-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="6" cy="16.5" r="4.25" />
+          <circle cx="18" cy="16.5" r="4.25" />
+          <path d="M6 16.5 L10.5 8.25 H15 L18 16.5" />
+          <path d="M10.5 8.25 L9 16.5 H18" />
+          <path d="M8.75 8.25 H12.25" />
+          <path d="M15 8.25 L16.75 5.75 H19.5" />
+        </svg>
+      </button>
+    </div>
+    <button type="button" class="fab" id="fab-locate" title="My location" aria-label="Center on my location">
       <svg class="fab-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="11" cy="11" r="6.5" />
-        <path d="M16.2 16.2 L20.5 20.5" />
-      </svg>
-    </button>
-    <button type="button" class="fab lg lg-cyan" id="fab-lines" title="Lines" aria-label="Browse lines">
-      <svg class="fab-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M5 7.5 H19" />
-        <path d="M5 12 H19" />
-        <path d="M5 16.5 H14" />
-      </svg>
-    </button>
-    <button type="button" class="fab lg lg-cyan" id="fab-locate" title="My location" aria-label="Center on my location">
-      <svg class="fab-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="3.2" />
-        <circle cx="12" cy="12" r="7.5" />
-        <path d="M12 2.5 V5.2 M12 18.8 V21.5 M2.5 12 H5.2 M18.8 12 H21.5" />
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 3.8 V7.2 M12 16.8 V20.2 M3.8 12 H7.2 M16.8 12 H20.2" />
       </svg>
     </button>
   </div>
@@ -1314,13 +1429,17 @@
     <span class="tron-brackets" aria-hidden="true"></span>
     <div id="sheet-handle" aria-hidden="true"></div>
     <div id="sheet-header">
-      <button type="button" id="sheet-back" aria-label="Back to station list">←</button>
+      <button type="button" id="sheet-back" aria-label="Back to station list">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6 L8 12 L14 18" /></svg>
+      </button>
       <div id="sheet-heading">
         <div id="sheet-title">Station</div>
         <div id="sheet-meta">ORANGE</div>
         <div id="sheet-updated">—</div>
       </div>
-      <button type="button" id="sheet-close" aria-label="Close">✕</button>
+      <button type="button" id="sheet-close" aria-label="Close">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7 L11 11 M13 13 L17 17 M17 7 L13 11 M11 13 L7 17" /></svg>
+      </button>
     </div>
     <div id="sheet-rows" aria-live="polite"></div>
   </div>
@@ -1328,14 +1447,13 @@
   <div id="browse-sheet" class="lg lg-lens" role="dialog" aria-label="Browse" aria-modal="true">
     <span class="tron-brackets" aria-hidden="true"></span>
     <div id="browse-header">
-      <button type="button" id="browse-back" aria-label="Back" hidden>←</button>
-      <div id="browse-title">Lines</div>
-      <button type="button" id="browse-close" aria-label="Close">✕</button>
-    </div>
-    <div id="browse-kind" role="group" aria-label="Train, bus or bike">
-      <button type="button" id="browse-kind-train" class="active" aria-pressed="true">Train</button>
-      <button type="button" id="browse-kind-bus" aria-pressed="false">Bus</button>
-      <button type="button" id="browse-kind-bike" aria-pressed="false">Bike</button>
+      <button type="button" id="browse-back" aria-label="Back" hidden>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6 L8 12 L14 18" /></svg>
+      </button>
+      <div id="browse-title" hidden></div>
+      <button type="button" id="browse-close" aria-label="Close">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7 L11 11 M13 13 L17 17 M17 7 L13 11 M11 13 L7 17" /></svg>
+      </button>
     </div>
     <input id="browse-search-input" type="search" placeholder="Station name…" enterkeyhint="search" autocomplete="off" />
     <div id="browse-list"></div>

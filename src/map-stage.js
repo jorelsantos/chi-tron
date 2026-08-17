@@ -25,8 +25,16 @@ import {
 } from './style.js';
 import { LINE_COLORS, rgbString } from './layers.js';
 import { liveLineKeys } from './catalog.js';
+import { offsetTForZoom, offsetTracks, ribbonPaint } from './track-offset.js';
 
 export const TRACK_GLOW_LAYER_IDS = ['l-tracks-wide', 'l-tracks-mid', 'l-tracks-core'];
+
+// B1: thin hot filament. Wide is atmosphere only — not a 14 px mud halo.
+export const TRACK_GLOW = [
+  { id: 'l-tracks-wide', opacity: 0.12, width: [12, 5.6, 16, 11], blur: 2 },
+  { id: 'l-tracks-mid', opacity: 0.72, width: [12, 3.4, 16, 6], blur: 0.6 },
+  { id: 'l-tracks-core', opacity: 0.96, width: [12, 1.9, 16, 3.2], blur: 0 },
+];
 
 export const BUILDING_LAYER_IDS = ['chi-buildings-3d', 'chi-buildings-3d-crown'];
 
@@ -84,34 +92,49 @@ export function createMapStage({ tracks, containerId = 'map' }) {
     document.getElementById('btn-view-3d')?.setAttribute('aria-pressed', String(is3d));
   }
 
+  let lastRibbonT = NaN;
+
+  function trackFeatures(zoomT) {
+    return offsetTracks(tracks, zoomT).map(({ key, coords }) => {
+      const paint = ribbonPaint(LINE_COLORS[key], zoomT);
+      return {
+        type: 'Feature',
+        id: key,
+        properties: {
+          line: key,
+          color: LINE_COLORS[key] ? rgbString(paint.color) : 'rgb(80, 80, 120)',
+          filament: rgbString(paint.filament),
+        },
+        geometry: { type: 'LineString', coordinates: coords },
+      };
+    });
+  }
+
+  function syncLoopRibbons() {
+    const src = map.getSource('l-tracks');
+    if (!src) return;
+    const zoomT = offsetTForZoom(map.getZoom());
+    if (Number.isFinite(lastRibbonT) && Math.abs(zoomT - lastRibbonT) < 0.02) return;
+    lastRibbonT = zoomT;
+    src.setData({ type: 'FeatureCollection', features: trackFeatures(zoomT) });
+  }
+
   function addTrackUnderglow() {
     if (map.getSource('l-tracks')) return;
-    const features = Object.entries(tracks).map(([key, line]) => ({
-      type: 'Feature',
-      id: key,
-      properties: {
-        line: key,
-        color: LINE_COLORS[key] ? rgbString(LINE_COLORS[key]) : 'rgb(80, 80, 120)',
-      },
-      geometry: { type: 'LineString', coordinates: line.coords },
-    }));
+    lastRibbonT = offsetTForZoom(map.getZoom());
     map.addSource('l-tracks', {
       type: 'geojson',
-      data: { type: 'FeatureCollection', features },
+      data: { type: 'FeatureCollection', features: trackFeatures(lastRibbonT) },
     });
     const stressOpacity = ['coalesce', ['feature-state', 'stressOpacity'], 1];
-    const glow = [
-      { id: 'l-tracks-wide', opacity: 0.18, width: [12, 5, 16, 14], blur: 3 },
-      { id: 'l-tracks-mid', opacity: 0.45, width: [12, 2, 16, 5], blur: 1 },
-      { id: 'l-tracks-core', opacity: 0.92, width: [12, 0.7, 16, 1.8], blur: 0 },
-    ];
-    for (const g of glow) {
+    for (const g of TRACK_GLOW) {
+      const colorKey = g.id === 'l-tracks-core' ? 'filament' : 'color';
       map.addLayer({
         id: g.id,
         type: 'line',
         source: 'l-tracks',
         paint: {
-          'line-color': ['get', 'color'],
+          'line-color': ['get', colorKey],
           'line-opacity': ['*', g.opacity, stressOpacity],
           'line-width': ['interpolate', ['linear'], ['zoom'], ...g.width],
           ...(g.blur ? { 'line-blur': g.blur } : {}),
@@ -250,6 +273,8 @@ export function createMapStage({ tracks, containerId = 'map' }) {
   let ready = false;
   /** @type {Array<() => void>} */
   const readyCallbacks = [];
+  map.on('zoom', syncLoopRibbons);
+
   map.on('load', () => {
     addTrackUnderglow();
     filterTracksToLive();
@@ -257,6 +282,8 @@ export function createMapStage({ tracks, containerId = 'map' }) {
     map.jumpTo(AERIAL_2D);
     map.setMaxBounds(CHICAGOLAND_BOUNDS);
     map.setMinZoom(CHICAGOLAND_MIN_ZOOM);
+    lastRibbonT = NaN;
+    syncLoopRibbons();
     ready = true;
     for (const cb of readyCallbacks.splice(0)) cb();
   });
