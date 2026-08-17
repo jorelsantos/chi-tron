@@ -21,7 +21,7 @@ import { BusArrivalsSession } from './bus-arrivals.js';
 import { startWatch, nearestStation, walkMinutes } from './geolocation.js';
 import { snapStationsToRails } from './stations-rail.js';
 import { liveLineKeys, liveStationsUnion } from './catalog.js';
-import { activeSurface, listFabAction, searchFabAction, dismissTopAction } from './ui-nav.js';
+import { activeSurface, searchFabAction, dismissTopAction } from './ui-nav.js';
 import { createMapStage, TRACK_GLOW_LAYER_IDS } from './map-stage.js';
 import { createBusData } from './bus-data.js';
 import { createBoard } from './board.js';
@@ -334,19 +334,6 @@ async function boot() {
     }
   });
 
-  document.getElementById('fab-lines')?.addEventListener('click', () => {
-    const act = listFabAction(currentSurface());
-    if (act === 'close-browse') {
-      browse.close();
-      return;
-    }
-    if (act === 'board-to-browse') {
-      board.close({ restoreBrowse: false });
-      browse.setKind('train');
-    }
-    browse.open('lines');
-  });
-
   document.getElementById('fab-search')?.addEventListener('click', () => {
     const act = searchFabAction(currentSurface(), browse.isSearch());
     if (act === 'close-browse') browse.close();
@@ -375,9 +362,9 @@ async function boot() {
         board.openBikeStation(info.object, { source: 'map' });
         return;
       }
-      if (info.layer?.id === 'glow-core') {
+      if (info.layer?.id === 'train-cars-core') {
         const t = info.object;
-        followVehicle('train', t.id, `${t.destNm || 'ORG'} · #${t.rn || '—'}`);
+        followVehicle('train', t.id, `${t.destNm || t.line || 'L'} · #${t.rn || '—'}`);
       }
     },
   });

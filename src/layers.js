@@ -6,11 +6,13 @@
 // white wherever several trains cluster.
 
 import { TripsLayer } from '@deck.gl/geo-layers';
-import { ScatterplotLayer, PathLayer } from '@deck.gl/layers';
+import { ScatterplotLayer, PathLayer, SolidPolygonLayer } from '@deck.gl/layers';
 import { capBuses } from './buses.js';
 import { CAR_CAP } from './cars.js';
 import { mPerDegLon, M_PER_DEG_LAT } from './tracks.js';
 import { diamondRing, pickSnapLine } from './stations-rail.js';
+import { CONSIST, consistModel, alignTrainToRibbon } from './train-consist.js';
+import { offsetLonLat, offsetTForZoom } from './track-offset.js';
 
 // Neon palette anchored to official CTA brand colors (transitchicago.com
 // developers/branding, 2026) then boosted for cyberpunk readability on a
@@ -48,13 +50,8 @@ export function rgbString(color) {
   return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 }
 
-// Live trains: longer additive trail so the tip reads as energy on the wire.
-const TRAIL_LENGTH = 14;
-// Tron lightcycle bolt: long enough to read on the rail, wider than the track glow.
-const TRAIN_BOLT_HALF_LEN_M = 36;
-const TRAIN_BOLT_CORE_HALF_LEN_M = 26;
-const TRAIN_BOLT_HALO_WIDTH_M = 14;
-const TRAIN_BOLT_CORE_WIDTH_M = 6;
+// Residual charge on the wire, drawn from the tail car only.
+const TRAIL_LENGTH = 18;
 
 /** Primary line for a station among currently visible lines. */
 export function stationPrimaryLine(s, visibleLines) {
@@ -89,8 +86,40 @@ const BUS_CAP = 120;
 // ~12m bus, the same way trains' glow discs aren't to-scale either — sized
 // so the capsule still reads as visibly elongated (not a dot) at
 // LOOP_PRESET's zoom, per the plan's explicit legibility requirement.
-const BUS_CAPSULE_HALF_LEN_M = 14;
-const BUS_CAPSULE_WIDTH_M = 5;
+// 1.5× the original capsule. Filled rounded-rect — boxy, soft corners.
+const BUS_CAPSULE_HALF_LEN_M = 21;
+const BUS_CAPSULE_WIDTH_M = 7.5;
+const BUS_CORNER_R_M = 1.5;
+const BUS_CORNER_STEPS = 5;
+
+/**
+ * Closed rounded-rectangle in map space. +x is heading, +y is left.
+ * Soft corners, long flat sides — a bus, not a pill.
+ */
+export function busBodyPolygon(pos, headingDeg) {
+  const heading = Number.isFinite(headingDeg) ? headingDeg : 0;
+  const halfL = BUS_CAPSULE_HALF_LEN_M;
+  const halfW = BUS_CAPSULE_WIDTH_M / 2;
+  const r = Math.min(BUS_CORNER_R_M, halfL * 0.35, halfW * 0.55);
+  const corners = [
+    { x: halfL, y: -halfW, a0: -Math.PI / 2, a1: 0 },
+    { x: halfL, y: halfW, a0: 0, a1: Math.PI / 2 },
+    { x: -halfL, y: halfW, a0: Math.PI / 2, a1: Math.PI },
+    { x: -halfL, y: -halfW, a0: Math.PI, a1: (3 * Math.PI) / 2 },
+  ];
+  const ring = [];
+  for (const c of corners) {
+    const cx = c.x - Math.sign(c.x) * r;
+    const cy = c.y - Math.sign(c.y) * r;
+    for (let i = 0; i <= BUS_CORNER_STEPS; i += 1) {
+      const a = c.a0 + (c.a1 - c.a0) * (i / BUS_CORNER_STEPS);
+      const along = offsetPoint(pos, heading, cx + Math.cos(a) * r);
+      ring.push(offsetPoint(along, heading - 90, cy + Math.sin(a) * r));
+    }
+  }
+  ring.push(ring[0]);
+  return ring;
+}
 // Buses get one dimmer, shorter trail pass — no 3-layer glow-head stack
 // like trains (KTD12: buses are not second-class, but they are cooler and
 // quieter).
@@ -296,12 +325,30 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
 
   // Live Nav: stations should already be rail-snapped (main.js); still filter by line.
   const shownStations = getShownStations(stations, visibleLines, display);
-  const stationDiamonds = shownStations.map((s) => {
-    const rgb = stationLineRgb(s, visibleLines);
+  const stationZoomT = offsetTForZoom(zoom);
+  const stationMarks = [];
+  for (const s of shownStations) {
+    const keys = (s.lines || []).filter((l) => visibleLines.has(l));
+    const use = keys.length ? keys : [s.railLine].filter(Boolean);
+    for (const lineKey of use) {
+      const rail = s.rails?.[lineKey];
+      stationMarks.push({
+        ...s,
+        railLine: lineKey,
+        coords: rail?.coords || s.coords,
+        railHeading: rail?.heading ?? s.railHeading,
+        markId: `${s.id}:${lineKey}`,
+      });
+    }
+  }
+  const stationDiamonds = stationMarks.map((s) => {
+    const rgb = LINE_COLORS[s.railLine] || stationLineRgb(s, visibleLines);
     const selected = s.id === selectedStationId;
+    const onRail = offsetLonLat(s.coords, s.railLine, stationZoomT, s.railHeading);
     return {
       ...s,
-      path: diamondRing(s.coords, selected ? 16 : 11),
+      coords: onRail,
+      path: diamondRing(onRail, selected ? 20 : 14),
       lineRgb: rgb,
       haloColor: selected
         ? [Math.min(255, rgb[0] + 40), Math.min(255, rgb[1] + 40), Math.min(255, rgb[2] + 40), 130]
@@ -325,34 +372,36 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
     blendAlphaDstFactor: 'one',
   };
 
-  // Heading fallback 0 (north) if CTA omits heading — still draws a bolt.
-  const trainBoltPath = (d, halfLen) => {
-    const h = Number.isFinite(d.heading) ? d.heading : 0;
-    return [
-      offsetPoint(d.pos, h, -halfLen * 0.65),
-      offsetPoint(d.pos, h, halfLen),
-    ];
-  };
+  // Ride the same Loop offset as the painted rail. Engine pos stays true.
+  const aligned = shown.map((t) => alignTrainToRibbon(t, zoom));
+  // Approaching trains swell slightly; 1.45 would close the car gaps.
+  const styleById = new Map(aligned.map((t) => [t.id, trainStyle(t, currentTime)]));
+  const consists = aligned.map((t) => {
+    const swell = styleById.get(t.id).radiusMult > 1 ? 1.08 : 1;
+    return consistModel(t, currentTime, swell);
+  });
+  const trainCars = consists.flatMap((c) => c.cars);
+  const trainCouplers = consists.flatMap((c) => c.couplers);
+  const trailById = new Map(shown.map((t, i) => [t.id, consists[i].trail]));
 
   return [
     new TripsLayer({
       id: 'trails',
       data: shown,
-      getPath: (d) => d.trail.map((p) => [p.lon, p.lat]),
-      getTimestamps: (d) => d.trail.map((p) => p.t),
+      getPath: (d) => trailById.get(d.id)?.path ?? d.trail.map((p) => [p.lon, p.lat]),
+      getTimestamps: (d) => trailById.get(d.id)?.times ?? d.trail.map((p) => p.t),
       getColor: (d) => {
         const c = LINE_COLORS[d.line] ?? [255, 255, 255];
-        return [c[0], c[1], c[2], 255];
+        return [c[0], c[1], c[2], 200];
       },
       currentTime,
       trailLength: TRAIL_LENGTH,
       fadeTrail: true,
       capRounded: true,
       jointRounded: true,
-      // Strong neon charge on the wire.
-      widthMinPixels: 8,
-      widthMaxPixels: 20,
-      opacity: 1,
+      widthMinPixels: 3,
+      widthMaxPixels: 9,
+      opacity: 0.85,
       updateTriggers: { getPath: trailVersion, getTimestamps: trailVersion },
       parameters: additiveParams,
     }),
@@ -376,31 +425,22 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       updateTriggers: { getPath: busTrailVersion, getTimestamps: busTrailVersion },
       parameters: { depthTest: false },
     }),
-    // U9 (R4, KTD12): the elongated capsule that carries the trains/buses/
-    // cars distinction by shape before color even registers. A two-point
-    // PathLayer segment centered on the bus and built from its real
-    // direction of travel — real geometry, so it orients correctly under
-    // any map bearing with no screen-space rotation math needed (unlike an
-    // IconLayer sprite, which would have to counter-rotate against the
-    // map's own bearing to stay geographically oriented).
-    // U17: the bus's own capsule body is its pickable target — already a
-    // forgiving-enough click area (its real rendered length/width), unlike
-    // cars below.
-    new PathLayer({
+    // U9 (R4, KTD12): boxy rounded-rect body. Shape carries bus-vs-train
+    // before color. Real heading, so it stays geographic under any bearing.
+    new SolidPolygonLayer({
       id: 'bus-capsules',
       data: shownBuses,
       pickable: true,
-      getPath: (d) => [
-        offsetPoint(d.pos, d.heading ?? 0, -BUS_CAPSULE_HALF_LEN_M),
-        offsetPoint(d.pos, d.heading ?? 0, BUS_CAPSULE_HALF_LEN_M),
-      ],
-      getColor: [...BUS_COLOR, 235],
-      getWidth: BUS_CAPSULE_WIDTH_M,
-      widthUnits: 'meters',
-      widthMinPixels: 4,
-      capRounded: true,
-      jointRounded: true,
-      updateTriggers: { getPath: busTrailVersion },
+      getPolygon: (d) => busBodyPolygon(d.pos, d.heading ?? 0),
+      getFillColor: [...BUS_COLOR, 235],
+      getLineColor: [210, 220, 240, 255],
+      getLineWidth: 0.8,
+      lineWidthUnits: 'meters',
+      lineWidthMinPixels: 1,
+      filled: true,
+      stroked: true,
+      extruded: false,
+      updateTriggers: { getPolygon: busTrailVersion },
       parameters: { depthTest: false },
     }),
     // U11: ambient traffic — dark bodies so the amber/red light pairs (not
@@ -446,47 +486,66 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       radiusMinPixels: 1.2,
       parameters: { depthTest: false },
     }),
-    // Train tip: Tron lightcycle bolt (oriented neon rod + hot core) — not discs.
+    // Three-car consist: skinny halo + filament core. Pick any car → same run.
     new PathLayer({
-      id: 'train-bolt-halo',
-      data: shown,
+      id: 'train-cars-halo',
+      data: trainCars,
       pickable: false,
-      getPath: (d) => trainBoltPath(d, TRAIN_BOLT_HALF_LEN_M * (trainStyle(d, currentTime).radiusMult || 1)),
+      getPath: (d) => d.path,
       getColor: (d) => {
         const c = LINE_COLORS[d.line] ?? [255, 255, 255];
-        const st = trainStyle(d, currentTime);
-        // Hotter than track underglow so the bolt reads on top of the line.
-        const a = Math.round(230 * st.fade * Math.min(1.35, st.brightBoost || 1));
+        const st = styleById.get(d.id) || { fade: 1, brightBoost: 1 };
+        const a = Math.round(210 * st.fade * Math.min(1.25, st.brightBoost || 1));
         return [c[0], c[1], c[2], Math.min(255, a)];
       },
-      getWidth: TRAIN_BOLT_HALO_WIDTH_M,
+      getWidth: CONSIST.haloWidthM,
       widthUnits: 'meters',
-      widthMinPixels: 12,
-      widthMaxPixels: 32,
+      widthMinPixels: 4.5,
+      widthMaxPixels: 14,
       capRounded: true,
       jointRounded: true,
       parameters: additiveParams,
       updateTriggers: { getPath: [trailVersion, currentTime], getColor: [trailVersion, currentTime] },
     }),
     new PathLayer({
-      id: 'train-bolt-core',
-      data: shown,
+      id: 'train-cars-core',
+      data: trainCars,
       pickable: true,
-      getPath: (d) => trainBoltPath(d, TRAIN_BOLT_CORE_HALF_LEN_M * (trainStyle(d, currentTime).radiusMult || 1)),
+      getPath: (d) => d.path,
       getColor: (d) => {
-        const st = trainStyle(d, currentTime);
-        const core = st.core || [255, 255, 255];
-        const a = Math.round(255 * st.fade);
-        return [core[0], core[1], core[2], a];
+        const st = styleById.get(d.id) || { fade: 1, core: [255, 255, 255] };
+        const line = LINE_COLORS[d.line] ?? [255, 255, 255];
+        const core = d.hot
+          ? st.core || [255, 255, 255]
+          : [
+              Math.round(line[0] * 0.45 + 255 * 0.55),
+              Math.round(line[1] * 0.45 + 255 * 0.55),
+              Math.round(line[2] * 0.45 + 255 * 0.55),
+            ];
+        return [core[0], core[1], core[2], Math.round(255 * st.fade)];
       },
-      getWidth: TRAIN_BOLT_CORE_WIDTH_M,
+      getWidth: CONSIST.coreWidthM,
       widthUnits: 'meters',
-      widthMinPixels: 5,
-      widthMaxPixels: 14,
+      widthMinPixels: 2.4,
+      widthMaxPixels: 7,
       capRounded: true,
       jointRounded: true,
       parameters: additiveParams,
       updateTriggers: { getPath: [trailVersion, currentTime], getColor: [trailVersion, currentTime] },
+    }),
+    new PathLayer({
+      id: 'train-couplers',
+      data: trainCouplers,
+      pickable: false,
+      getPath: (d) => d.path,
+      getColor: [255, 255, 255, 120],
+      getWidth: CONSIST.couplerWidthM,
+      widthUnits: 'meters',
+      widthMinPixels: 1.4,
+      widthMaxPixels: 4,
+      capRounded: true,
+      parameters: additiveParams,
+      updateTriggers: { getPath: [trailVersion, currentTime] },
     }),
     // Stations: diamond nodes ON the rail, colored by that station's line.
     new PathLayer({
@@ -495,16 +554,16 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       pickable: false,
       getPath: (d) => d.path,
       getColor: (d) => d.haloColor,
-      getWidth: (d) => (d.id === selectedStationId ? 10 : 6),
-      widthMinPixels: 3,
-      widthMaxPixels: 14,
+      getWidth: (d) => (d.id === selectedStationId ? 14 : 8),
+      widthMinPixels: 4,
+      widthMaxPixels: 18,
       jointRounded: false,
       capRounded: false,
       parameters: { depthTest: false },
       updateTriggers: {
         getColor: [selectedStationId, [...visibleLines].join(',')],
         getWidth: selectedStationId,
-        getPath: selectedStationId,
+        getPath: [selectedStationId, zoom],
       },
     }),
     new PathLayer({
@@ -513,25 +572,25 @@ export function buildLayers(trains, currentTime, visibleLines, options = {}) {
       pickable: true,
       getPath: (d) => d.path,
       getColor: (d) => d.ringColor,
-      getWidth: (d) => (d.id === selectedStationId ? 3.5 : 2.2),
+      getWidth: (d) => (d.id === selectedStationId ? 5 : 3),
       widthMinPixels: 2,
-      widthMaxPixels: 6,
+      widthMaxPixels: 8,
       jointRounded: false,
       capRounded: false,
       parameters: { depthTest: false },
       updateTriggers: {
         getColor: [selectedStationId, [...visibleLines].join(',')],
         getWidth: selectedStationId,
-        getPath: selectedStationId,
+        getPath: [selectedStationId, zoom],
       },
     }),
     new ScatterplotLayer({
       id: 'station-accessibility',
-      data: shownStations.filter((s) => accessibilityStations.has?.(s.id)),
+      data: stationDiamonds.filter((s) => accessibilityStations.has?.(s.id)),
       getPosition: (d) => d.coords,
       getFillColor: [...ACCESSIBILITY_GLYPH_COLOR, 220],
-      getRadius: 3,
-      radiusMinPixels: 2,
+      getRadius: 6,
+      radiusMinPixels: 4,
       parameters: { depthTest: false },
     }),
     // Me-dot: Maps blue — never Orange (visual hierarchy law).

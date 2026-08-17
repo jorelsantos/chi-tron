@@ -53,7 +53,7 @@ export function span(text, className) {
  * @param {object} opts
  * @param {HTMLElement|null} [opts.lead] swatch / badge / orb cluster
  * @param {string} opts.name primary label
- * @param {string} [opts.meta] right-aligned status word (LIVE, MAP, 12 STOPS)
+ * @param {string|{text: string, tone?: string}[]} [opts.meta]
  * @param {boolean} [opts.chevron] show the › affordance
  * @param {() => void} opts.onClick
  * @returns {HTMLButtonElement}
@@ -64,10 +64,29 @@ export function browseRow({ lead = null, name, meta, chevron = false, onClick })
   btn.className = 'browse-row';
   if (lead) btn.appendChild(lead);
   btn.appendChild(span(name, 'browse-name'));
-  if (meta != null) btn.appendChild(span(meta, 'meta'));
-  if (chevron) btn.appendChild(span('›', 'browse-chevron'));
+  if (Array.isArray(meta)) {
+    const wrap = document.createElement('span');
+    wrap.className = 'meta meta-group';
+    for (const part of meta) {
+      const tone = part.tone ? ` is-${part.tone}` : '';
+      wrap.appendChild(span(part.text, `meta-part${tone}`));
+    }
+    btn.appendChild(wrap);
+  } else if (meta != null) {
+    btn.appendChild(span(meta, 'meta'));
+  }
+  if (chevron) btn.appendChild(chevronMark());
   btn.addEventListener('click', onClick);
   return btn;
+}
+
+function chevronMark() {
+  const el = document.createElement('span');
+  el.className = 'browse-chevron';
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML =
+    '<svg class="icon" viewBox="0 0 24 24"><path d="M9 6 L15 12 L9 18" /></svg>';
+  return el;
 }
 
 /**

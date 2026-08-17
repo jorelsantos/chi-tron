@@ -1,7 +1,7 @@
 // Snap station markers onto track polylines so the 3D world reads as one system.
 // GTFS stop centroids often sit 5–40 m off shape geometry.
 
-import { prepareLine, snapToLine, pointAtDist } from './tracks.js';
+import { prepareLine, snapToLine, pointAtDist, bearingDeg } from './tracks.js';
 
 /**
  * Prefer a visible line the station serves; MVP prefers Org.
@@ -22,6 +22,19 @@ export function pickSnapLine(stationLines, preferredOrder = ['Org', 'Red', 'Blue
  * @param {string[]} [preferredOrder]
  * @returns {Record<string, object>} stations with coords snapped to rail; gtfsCoords preserved
  */
+function snapOnto(prep, coords) {
+  const snap = snapToLine(prep, coords);
+  const onRail = pointAtDist(prep, snap.dist);
+  const ahead = pointAtDist(prep, snap.dist + 12);
+  const behind = pointAtDist(prep, Math.max(0, snap.dist - 12));
+  return {
+    coords: onRail,
+    heading: bearingDeg(behind, ahead),
+    dist: snap.dist,
+    offTrack: snap.offTrack,
+  };
+}
+
 export function snapStationsToRails(tracksData, stations, preferredOrder) {
   const prepared = {};
   for (const [key, line] of Object.entries(tracksData || {})) {
@@ -30,22 +43,23 @@ export function snapStationsToRails(tracksData, stations, preferredOrder) {
 
   const out = {};
   for (const [id, s] of Object.entries(stations || {})) {
-    const lineKey = pickSnapLine(s.lines, preferredOrder);
-    const prep = lineKey ? prepared[lineKey] : null;
-    if (!prep || !s.coords) {
-      out[id] = { ...s, id: s.id || id, gtfsCoords: s.coords, coords: s.coords };
-      continue;
+    const rails = {};
+    for (const key of s.lines || []) {
+      const prep = prepared[key];
+      if (prep && s.coords) rails[key] = snapOnto(prep, s.coords);
     }
-    const snap = snapToLine(prep, s.coords);
-    const onRail = pointAtDist(prep, snap.dist);
+    const lineKey = pickSnapLine(s.lines, preferredOrder);
+    const primary = (lineKey && rails[lineKey]) || Object.values(rails)[0] || null;
     out[id] = {
       ...s,
       id: s.id || id,
       gtfsCoords: s.coords,
-      coords: onRail,
+      coords: primary?.coords || s.coords,
       railLine: lineKey,
-      railDist: snap.dist,
-      railOffM: snap.offTrack,
+      railDist: primary?.dist,
+      railOffM: primary?.offTrack,
+      railHeading: primary?.heading,
+      rails,
     };
   }
   return out;

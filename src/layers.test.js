@@ -1,7 +1,7 @@
 // Coverage for pure/data-transform logic in layers.js.
 
 import { describe, it, expect } from 'vitest';
-import { trainStyle, buildLayers, lineStressTreatment } from './layers.js';
+import { trainStyle, buildLayers, lineStressTreatment, busBodyPolygon } from './layers.js';
 
 function layerById(layers, id) {
   return layers.find((l) => l.id === id);
@@ -48,6 +48,7 @@ describe('buildLayers tip-only trains', () => {
       pos: [-87.6, 41.9],
       line: 'Red',
       state: 'tracking',
+      heading: 0,
       trail: [{ lon: -87.6, lat: 41.9, t: 0 }],
     },
   ];
@@ -56,14 +57,16 @@ describe('buildLayers tip-only trains', () => {
     b: { id: 'b', coords: [-87.61, 41.91], lines: ['Blue'], weight: 0.5 },
   };
 
-  it('draws live train trails and bolt tips', () => {
+  it('draws live train trails and a three-car consist', () => {
     const layers = buildLayers(trains, 0, visibleLines, {
       stations,
       display: { trains: true, stations: false },
     });
     expect(layerById(layers, 'trails').props.data.length).toBe(1);
-    expect(layerById(layers, 'train-bolt-core').props.data.length).toBe(1);
-    expect(layerById(layers, 'train-bolt-halo').props.data.length).toBe(1);
+    expect(layerById(layers, 'train-cars-core').props.data.length).toBe(3);
+    expect(layerById(layers, 'train-cars-halo').props.data.length).toBe(3);
+    expect(layerById(layers, 'train-couplers').props.data.length).toBe(2);
+    expect(layerById(layers, 'train-bolt-core')).toBeUndefined();
   });
 
   it('empties trail data when display.trains is false', () => {
@@ -82,6 +85,48 @@ describe('buildLayers tip-only trains', () => {
     const ring = layerById(layers, 'station-ring');
     expect(ring.props.data.length).toBe(1);
     expect(ring.props.data[0].path?.length).toBeGreaterThanOrEqual(4);
+    const path = ring.props.data[0].path;
+    const dLat = Math.abs(path[0][1] - path[2][1]);
+    expect(dLat).toBeGreaterThan(0.0002);
+    expect(dLat).toBeLessThan(0.00032);
+  });
+
+  it('draws one diamond per visible line on a shared stop', () => {
+    const shared = {
+      id: 'howard',
+      coords: [-87.673, 42.019],
+      lines: ['Red', 'P'],
+      rails: {
+        Red: { coords: [-87.672, 42.019], heading: 0 },
+        P: { coords: [-87.674, 42.019], heading: 0 },
+      },
+    };
+    const layers = buildLayers([], 0, new Set(['Red', 'P']), {
+      stations: { howard: shared },
+      display: { trains: false, stations: true },
+      zoom: 14,
+    });
+    const marks = layerById(layers, 'station-ring').props.data;
+    expect(marks).toHaveLength(2);
+    expect(marks.map((m) => m.railLine).sort()).toEqual(['P', 'Red']);
+    expect(marks[0].coords[0]).not.toBe(marks[1].coords[0]);
+  });
+
+  it('shifts a Loop Pink station onto the inward ribbon', () => {
+    const pinkStop = {
+      id: 'p-loop',
+      coords: [-87.6262, 41.882],
+      lines: ['Pink'],
+      railLine: 'Pink',
+      railHeading: 0,
+    };
+    const layers = buildLayers([], 0, new Set(['Pink']), {
+      stations: { 'p-loop': pinkStop },
+      display: { trains: false, stations: true },
+      zoom: 14,
+    });
+    const ring = layerById(layers, 'station-ring');
+    expect(ring.props.data[0].coords[0]).toBeLessThan(pinkStop.coords[0]);
   });
 
   it('draws user me-dot when user fix provided', () => {
@@ -119,13 +164,26 @@ describe('lineStressTreatment (U15)', () => {
 });
 
 describe('buildLayers picking scope (U17)', () => {
-  it('enables pickable on train bolt core, bus capsules, car bodies', () => {
+  it('enables pickable on train car cores, bus capsules, car bodies', () => {
     const layers = buildLayers([], 0, new Set(['Red']), {});
-    expect(layerById(layers, 'train-bolt-halo').props.pickable).not.toBe(true);
-    expect(layerById(layers, 'train-bolt-core').props.pickable).toBe(true);
-    expect(layerById(layers, 'bus-capsules').props.pickable).toBe(true);
+    expect(layerById(layers, 'train-cars-halo').props.pickable).not.toBe(true);
+    expect(layerById(layers, 'train-cars-core').props.pickable).toBe(true);
+    expect(layerById(layers, 'train-couplers').props.pickable).not.toBe(true);
+    const bus = layerById(layers, 'bus-capsules');
+    expect(bus.props.pickable).toBe(true);
+    expect(typeof bus.props.getPolygon).toBe('function');
     expect(layerById(layers, 'car-bodies').props.pickable).toBe(true);
     expect(layerById(layers, 'trails').props.pickable).not.toBe(true);
+  });
+});
+
+describe('busBodyPolygon', () => {
+  it('is a closed rounded rectangle, not a two-point pill', () => {
+    const ring = busBodyPolygon([-87.63, 41.88], 0);
+    expect(ring.length).toBeGreaterThan(16);
+    expect(ring[0]).toEqual(ring[ring.length - 1]);
+    const lats = ring.map((p) => p[1]);
+    expect(Math.max(...lats) - Math.min(...lats)).toBeGreaterThan(0.0003);
   });
 });
 

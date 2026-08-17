@@ -30,7 +30,17 @@ describe('stations-rail', () => {
       expect(re.offTrack).toBeLessThan(1.5); // on-rail after snap
       expect(s.gtfsCoords).toBeTruthy();
       expect(s.railLine).toBe('Org');
+      expect(Number.isFinite(s.railHeading)).toBe(true);
+      expect(s.rails?.Org).toBeTruthy();
     }
+  });
+
+  it('snaps a multi-line stop onto every line it serves', () => {
+    const snapped = snapStationsToRails(tracks, stations);
+    const shared = Object.values(snapped).find((s) => (s.lines || []).includes('Red') && (s.lines || []).includes('P'));
+    expect(shared).toBeTruthy();
+    expect(shared.rails.Red).toBeTruthy();
+    expect(shared.rails.P).toBeTruthy();
   });
 
   it('diamondRing returns closed 5-point path', () => {
