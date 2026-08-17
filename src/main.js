@@ -27,6 +27,7 @@ import { createBusData } from './bus-data.js';
 import { createBoard } from './board.js';
 import { createBrowse } from './browse.js';
 import { DivvyEngine, normalizeStations } from './divvy.js';
+import { alignTrainToRibbon } from './train-consist.js';
 
 const statusEl = document.getElementById('status');
 const busStatusEl = document.getElementById('bus-status');
@@ -355,7 +356,7 @@ async function boot() {
         return;
       }
       if (info.layer?.id === 'station-ring') {
-        board.openStation(info.object);
+        board.openStation(info.object, { source: 'map', lineKey: info.object.railLine });
         return;
       }
       if (info.layer?.id === 'divvy-stations') {
@@ -404,7 +405,7 @@ async function boot() {
 
     if (followed) {
       const vehicle = trains.find((v) => v.id === followed.id);
-      if (vehicle?.pos) map.setCenter(vehicle.pos);
+      if (vehicle?.pos) map.setCenter(alignTrainToRibbon(vehicle, map.getZoom()).pos);
       else releaseFollow();
     }
 
