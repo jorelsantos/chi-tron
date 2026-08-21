@@ -2,17 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Live nav for Chicago transit — neon map, real trains. Unofficial fan project." />
+  <meta name="theme-color" content="#05070c" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CHI-TRON" />
   <title>CHI-TRON</title>
+  <link rel="canonical" href="https://chi-tron.vercel.app/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="CHI-TRON" />
+  <meta property="og:title" content="CHI-TRON" />
+  <meta property="og:description" content="Live nav for Chicago transit — neon map, real trains." />
+  <meta property="og:url" content="https://chi-tron.vercel.app/" />
+  <meta property="og:image" content="https://chi-tron.vercel.app/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="CHI-TRON" />
+  <meta name="twitter:description" content="Live nav for Chicago transit — neon map, real trains." />
+  <meta name="twitter:image" content="https://chi-tron.vercel.app/og.png" />
   <!-- Browsers request /favicon.ico unprompted when no icon is declared.
        Nothing was declared and no file existed, so every page load logged a
        404 — the only console error on the site. Declaring an icon stops the
        implicit request entirely. -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="apple-touch-icon" href="/favicon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -193,8 +210,9 @@
     #disclaimer {
       bottom: max(10px, env(safe-area-inset-bottom));
       left: 50%; transform: translateX(-50%); text-align: center;
-      width: min(92vw, 420px);
-      font-size: 8px; letter-spacing: 0.1em; color: rgba(140, 160, 200, 0.38);
+      width: min(92vw, 480px);
+      font-size: 8px; letter-spacing: 0.1em; line-height: 1.7;
+      color: rgba(140, 160, 200, 0.38);
       padding: 0 56px; /* clear FAB thumb zone */
       pointer-events: none;
     }
@@ -1459,7 +1477,7 @@
     <div id="browse-list"></div>
   </div>
 
-  <div class="hud" id="disclaimer">UNOFFICIAL FAN PROJECT — NOT AFFILIATED WITH CTA</div>
+  <div class="hud" id="disclaimer">UNOFFICIAL FAN PROJECT — NOT AFFILIATED WITH CTA<br />GPS STAYS ON THIS DEVICE · NO ACCOUNTS</div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

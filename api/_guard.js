@@ -19,11 +19,11 @@
 // Honest limitation: layers 2 and 3 hold state in module memory, so they are
 // per warm serverless instance, not global across the deployment. They bound
 // what one instance can spend and make casual scraping expensive; they are
-// not an exact distributed quota. Primary CTA cost control for train feeds is
-// edge caching on /api/tt and /api/arrivals (see TRAIN_*_CACHE below) — edge
-// hits never invoke this function. This budget is defense-in-depth for bus
-// and for cache misses. For a true global quota, move the counters to
-// Vercel KV / Upstash — the call sites here do not change.
+// not an exact distributed quota. Primary CTA cost control is edge caching
+// on /api/tt, /api/arrivals, and /api/bus (see *_CACHE below) — edge hits
+// never invoke this function. This budget is defense-in-depth for cache
+// misses. For a true global quota, move the counters to Vercel KV / Upstash
+// — the call sites here do not change.
 
 /** Requests per IP per window (layer 2). */
 export const RATE_LIMIT = 120;
@@ -50,6 +50,26 @@ export const TRAIN_ARRIVALS_CACHE = 'public, max-age=0, s-maxage=15, stale-while
 
 /** Edge cache for Divvy GBFS status (client poll 60s, ttl 60). */
 export const DIVVY_STATUS_CACHE = 'public, max-age=0, s-maxage=45, stale-while-revalidate=30';
+
+/** Edge cache for bus vehicles. Client poll is 15s. */
+export const BUS_VEHICLES_CACHE = 'public, max-age=0, s-maxage=10, stale-while-revalidate=15';
+
+/** Edge cache for bus boards. Client poll is 20s. */
+export const BUS_PREDICTIONS_CACHE = 'public, max-age=0, s-maxage=15, stale-while-revalidate=20';
+
+/**
+ * Shared-cache header for a bus proxy response. Errors stay uncached so a
+ * brief CTA blip does not freeze every viewer for the TTL.
+ * @param {string} method getvehicles | getpredictions
+ * @param {number} status upstream HTTP status
+ * @returns {string}
+ */
+export function busCacheControl(method, status) {
+  if (!(status >= 200 && status < 300)) return 'no-store';
+  return String(method || '').toLowerCase() === 'getpredictions'
+    ? BUS_PREDICTIONS_CACHE
+    : BUS_VEHICLES_CACHE;
+}
 
 /**
  * Host of a URL-ish header value, lowercased, or null when unparseable.

@@ -1,5 +1,7 @@
 # CHI-TRON
 
+**Live:** https://chi-tron.vercel.app/
+
 **Live nav for Chicago transit** — neon map, real trains, you in the world.
 
 Live **all eight L lines**: vehicle positions, single-line arrival boards
@@ -90,7 +92,7 @@ vercel --prod
 
 ## Stretch
 
-Tracker-first shell · focus-route map poll · Divvy · PWA.
+Tracker-first shell · focus-route map poll. PWA install chrome is in.
 
 Pinned city feeds (after Divvy): ADS-B, Travel Midwest speeds + cams, weather/lake, Pulse (311 + Block Club). See `docs/briefs/city-feeds.md`.
 

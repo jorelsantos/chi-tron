@@ -9,6 +9,9 @@ import {
   DAILY_BUDGET,
   isAllowedBusMethod,
   isRouteParam,
+  busCacheControl,
+  BUS_VEHICLES_CACHE,
+  BUS_PREDICTIONS_CACHE,
 } from './_guard.js';
 
 describe('hostOf', () => {
@@ -229,5 +232,22 @@ describe('isAllowedBusMethod', () => {
   it('rejects empty and missing values', () => {
     expect(isAllowedBusMethod('')).toBe(false);
     expect(isAllowedBusMethod(undefined)).toBe(false);
+  });
+});
+
+describe('busCacheControl', () => {
+  it('gives vehicles a 10s shared window on success', () => {
+    expect(busCacheControl('getvehicles', 200)).toBe(BUS_VEHICLES_CACHE);
+    expect(BUS_VEHICLES_CACHE).toContain('s-maxage=10');
+  });
+
+  it('gives boards a 15s shared window on success', () => {
+    expect(busCacheControl('getpredictions', 200)).toBe(BUS_PREDICTIONS_CACHE);
+    expect(BUS_PREDICTIONS_CACHE).toContain('s-maxage=15');
+  });
+
+  it('does not cache upstream errors', () => {
+    expect(busCacheControl('getvehicles', 502)).toBe('no-store');
+    expect(busCacheControl('getpredictions', 500)).toBe('no-store');
   });
 });
