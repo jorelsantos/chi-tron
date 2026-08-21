@@ -2,7 +2,7 @@
 // Catch-all so /api/bus/getvehicles and /api/bus/getpredictions both hit this
 // function (api/bus.js alone only mounts /api/bus on Vercel).
 
-import { guardRequest, isAllowedBusMethod, isRouteParam } from '../_guard.js';
+import { guardRequest, isAllowedBusMethod, isRouteParam, busCacheControl } from '../_guard.js';
 
 export default async function handler(req, res) {
   if (!guardRequest(req, res)) return;
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     // Vercel dynamic route: /api/bus/[...path] → query.path = string | string[]
     // Fallback: parse pathname when the platform preserves the full URL.
     let sub = '';
-    const qPath = req.query?.path;
+    const qPath = req.query?.['...path'] ?? req.query?.path;
     if (qPath != null) {
       sub = Array.isArray(qPath) ? qPath.join('/') : String(qPath);
     } else {
@@ -45,7 +45,9 @@ export default async function handler(req, res) {
     const body = await upstream.text();
     res.status(upstream.status);
     res.setHeader('content-type', upstream.headers.get('content-type') || 'application/json');
-    res.setHeader('cache-control', 'no-store');
+    // Collapse concurrent viewers on the same method+query into one upstream
+    // call per window. Errors stay uncached so a CTA blip does not freeze.
+    res.setHeader('cache-control', busCacheControl(sub, upstream.status));
     res.send(body);
   } catch (err) {
     res.status(502).json({ error: err?.message || 'upstream failed' });

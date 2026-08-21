@@ -199,6 +199,57 @@ describe('bus proxy handler', () => {
     expect(res.statusCode).toBe(403);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it('resolves the method from the ...path query key', async () => {
+    const res = mockRes();
+    await busHandler(
+      browserReq({
+        url: '/api/bus/getvehicles?...path=getvehicles',
+        query: { '...path': 'getvehicles' },
+      }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(fetchSpy.mock.calls[0][0]).toContain('/bustime/api/v3/getvehicles');
+  });
+
+  it('sets s-maxage=10 shared cache on getvehicles 200', async () => {
+    const res = mockRes();
+    await busHandler(
+      browserReq({ url: '/api/bus/getvehicles?rt=8', query: { path: 'getvehicles', rt: '8' } }),
+      res,
+    );
+    expect(res.headers['cache-control']).toContain('s-maxage=10');
+    expect(res.headers['cache-control']).toContain('stale-while-revalidate');
+  });
+
+  it('sets s-maxage=15 shared cache on getpredictions 200', async () => {
+    const res = mockRes();
+    await busHandler(
+      browserReq({
+        url: '/api/bus/getpredictions?stpid=18',
+        query: { path: 'getpredictions', stpid: '18' },
+      }),
+      res,
+    );
+    expect(res.headers['cache-control']).toContain('s-maxage=15');
+  });
+
+  it('does not cache upstream errors', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      headers: { get: () => 'application/json' },
+      text: async () => '{"error":"up"}',
+    });
+    const res = mockRes();
+    await busHandler(
+      browserReq({ url: '/api/bus/getvehicles', query: { path: 'getvehicles' } }),
+      res,
+    );
+    expect(res.statusCode).toBe(502);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
 });
 
 describe('alerts proxy handler', () => {
