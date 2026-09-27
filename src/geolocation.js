@@ -56,6 +56,59 @@ export function startWatch({ onFix, onError = () => {}, highAccuracy = true }) {
 }
 
 /**
+ * One locate watch. An error stops it so the next enable can start again.
+ * A second enable while that watch is active returns the same watch.
+ * @param {object} opts
+ * @param {(hooks: { onError: (err: unknown) => void, onFix: (fix: unknown) => void }) => { stop?: () => void, stopped?: boolean }|null} opts.start
+ * @param {() => void} opts.onOff
+ * @param {(fix: unknown) => void} opts.onFix
+ */
+export function armLocationWatch({ start, onOff, onFix }) {
+  /** @type {{ stop?: () => void, stopped?: boolean }|null} */
+  let handle = null;
+
+  function stopWatch(watch) {
+    if (!watch) return;
+    if (typeof watch.stop === 'function') watch.stop();
+    watch.stopped = true;
+  }
+
+  function enable() {
+    if (handle) return handle;
+    /** @type {{ stop?: () => void, stopped?: boolean }|null} */
+    let started = null;
+    let ended = false;
+    started = start({
+      onError() {
+        if (ended || (handle && handle !== started)) return;
+        ended = true;
+        stopWatch(started);
+        if (!handle || handle === started) handle = null;
+        onOff();
+      },
+      onFix(fix) {
+        if (ended || (handle && started && handle !== started)) return;
+        onFix(fix);
+      },
+    });
+    if (ended) {
+      stopWatch(started);
+      handle = null;
+      return null;
+    }
+    handle = started;
+    return handle;
+  }
+
+  return {
+    enable,
+    get handle() {
+      return handle;
+    },
+  };
+}
+
+/**
  * Haversine distance meters.
  * @param {[number, number]} a [lon, lat]
  * @param {[number, number]} b [lon, lat]
