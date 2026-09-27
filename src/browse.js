@@ -37,6 +37,26 @@ import {
   thumbIndexFromRatio,
 } from './browse-titles.js';
 import { bikeStatusMeta } from './bike-status.js';
+import { applyDialogPresence, focusOpenDialog, trapDialogTab } from './ui-nav.js';
+
+/** DOM budget for one bike list. The caption names the rows this cap hides. */
+const BIKE_LIST_CAP = 200;
+
+/**
+ * First rows of an already-sorted list, plus SHOWING n OF m.
+ * A search passes the filtered list, so m is that length.
+ * @param {object[]} list
+ * @returns {{ shown: object[], total: number, caption: string }}
+ */
+export function capBikeList(list) {
+  const total = list.length;
+  const shown = list.slice(0, BIKE_LIST_CAP);
+  return {
+    shown,
+    total,
+    caption: `SHOWING ${shown.length} OF ${total}`,
+  };
+}
 
 /**
  * @param {object} deps
@@ -211,10 +231,12 @@ export function createBrowse({
       showEmpty(browseList, q ? 'NO MATCH' : 'NO STATIONS');
       return;
     }
-    // Cap list length for DOM budget; search narrows.
-    const shown = list.slice(0, 200);
+    const capped = capBikeList(list);
+    const caption = document.createElement('div');
+    caption.className = 'sheet-empty';
+    caption.textContent = capped.caption;
     browseList.replaceChildren(
-      ...shown.map((st) => {
+      ...capped.shown.map((st) => {
         return browseRow({
           name: st.name || st.id,
           meta: bikeStatusMeta(st),
@@ -222,6 +244,7 @@ export function createBrowse({
           onClick: () => onOpenBikeStation(st, { source: 'stations' }),
         });
       }),
+      caption,
     );
   }
 
@@ -364,6 +387,7 @@ export function createBrowse({
 
   function close() {
     browseEl?.classList.remove('open');
+    applyDialogPresence(browseEl, false);
     browseEl?.classList.remove('mode-search');
     browseEl?.classList.remove('mode-bus-list');
     browseEl?.classList.remove('mode-bike-list');
@@ -383,6 +407,7 @@ export function createBrowse({
     if (isBoardOpen()) closeBoard();
     mode = nextMode;
     browseEl?.classList.add('open');
+    applyDialogPresence(browseEl, true);
     const showBusSearch = kind === 'bus' && nextMode === 'lines';
     const showBikeSearch = kind === 'bike' && nextMode === 'lines';
     browseEl?.classList.toggle('mode-search', nextMode === 'search' && kind === 'train');
@@ -405,6 +430,7 @@ export function createBrowse({
       renderSearch('');
     }
     if (nextMode === 'search' || showBusSearch || showBikeSearch) searchInput?.focus();
+    focusOpenDialog(browseEl);
   }
 
   /**
@@ -452,6 +478,10 @@ export function createBrowse({
   }
 
   // ---- event wiring -----------------------------------------------------
+
+  browseEl?.addEventListener('keydown', (event) => {
+    trapDialogTab(event, browseEl, isOpen());
+  });
 
   document.getElementById('browse-close')?.addEventListener('click', close);
   document.getElementById('browse-back')?.addEventListener('click', () => {
