@@ -3,7 +3,7 @@
 // verification): toBool()'s CTA-payload normalization, and the mock
 // isDly/isApp re-roll timer exercised through TrainEngine's public API.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { toBool, TrainEngine, now } from './trains.js';
 
 describe('toBool', () => {
@@ -66,5 +66,74 @@ describe('TrainEngine.clear (U16)', () => {
     expect(engine.trains.size).toBeGreaterThan(0);
     engine.clear();
     expect(engine.trains.size).toBe(0);
+  });
+});
+
+function redTrainBody(rn, errCd = '0') {
+  return {
+    ctatt: {
+      errCd,
+      route: {
+        '@name': 'red',
+        train: { rn, lon: '-87.63', lat: '41.88' },
+      },
+    },
+  };
+}
+
+function jsonResponse(body, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  };
+}
+
+// Poller backs off after a failure (5s, then 10s, then 20s, then 40s).
+// Step one second at a time so the 20s abort timeout never fires mid-request.
+async function untilStatuses(statuses, count) {
+  for (let step = 0; step < 80 && statuses.length < count; step++) {
+    await vi.advanceTimersByTimeAsync(1000);
+  }
+}
+
+describe('TrainEngine live errCd', () => {
+  let engine;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    engine = new TrainEngine(FAKE_TRACKS);
+  });
+
+  afterEach(() => {
+    engine.stop();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('ends at lost after three errCd 100 polls and keeps Red-101, then returns to live on errCd 0', async () => {
+    const bodies = [
+      redTrainBody('101'),
+      { ctatt: { errCd: '100' } },
+      { ctatt: { errCd: '100' } },
+      { ctatt: { errCd: '100' } },
+      redTrainBody('101', '0'),
+    ];
+    let next = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(bodies[next++])));
+
+    const statuses = [];
+    engine.onStatus = (status) => {
+      statuses.push(status);
+    };
+    engine.startLive();
+
+    await untilStatuses(statuses, 4);
+    expect(statuses).toEqual(['live', 'live', 'live', 'lost']);
+    expect(engine.trains.has('Red-101')).toBe(true);
+
+    await untilStatuses(statuses, 5);
+    expect(statuses.at(-1)).toBe('live');
+    expect(engine.trains.has('Red-101')).toBe(true);
   });
 });

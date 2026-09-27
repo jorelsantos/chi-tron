@@ -187,6 +187,9 @@ export class TrainEngine {
     const res = await fetch(`/api/tt?rt=${ROUTES.join(',')}&outputType=JSON`, { signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    if (data?.ctatt?.errCd && String(data.ctatt.errCd) !== '0') {
+      throw new Error(data.ctatt.errNm || `CTA err ${data.ctatt.errCd}`);
+    }
     this.#ingest(data);
   }
 
