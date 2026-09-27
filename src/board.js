@@ -15,6 +15,24 @@ import { busRouteDef } from './bus-catalog.js';
 import { escapeHtml, emptyState } from './dom.js';
 import { bikeCountTone, dockCountTone } from './bike-status.js';
 
+const FEED_ERROR_RE = /key|HTTP|failed|network/i;
+
+/**
+ * Label for the board body. A budget hold or a feed error replaces rows
+ * that are already on screen. `ROWS` means paint the predictions.
+ * @param {object[]|null|undefined} rows
+ * @param {string|null} error
+ * @param {boolean} loaded
+ * @returns {'BUDGET HOLD'|'FEED ERROR'|'ROWS'|'NO PREDICTIONS'|'LOADING…'}
+ */
+export function boardRowsLabel(rows, error, loaded) {
+  if (error === 'BUDGET HOLD') return 'BUDGET HOLD';
+  if (error && FEED_ERROR_RE.test(String(error))) return 'FEED ERROR';
+  if (rows?.length) return 'ROWS';
+  if (error) return 'NO PREDICTIONS';
+  return loaded ? 'NO PREDICTIONS' : 'LOADING…';
+}
+
 /**
  * @typedef {{
  *   source: 'map'|'stations'|'search',
@@ -107,20 +125,12 @@ export function createBoard({
    */
   function renderRows(rows, error, loaded, renderGroups) {
     if (!sheetRows) return;
-    if (error && !rows?.length) {
-      const label = error === 'BUDGET HOLD'
-        ? 'BUDGET HOLD'
-        : /key|HTTP|failed|network/i.test(String(error))
-          ? 'FEED ERROR'
-          : 'NO PREDICTIONS';
-      sheetRows.replaceChildren(emptyState(label));
+    const label = boardRowsLabel(rows, error, loaded);
+    if (label === 'ROWS') {
+      sheetRows.replaceChildren(renderGroups(rows));
       return;
     }
-    if (!rows?.length) {
-      sheetRows.replaceChildren(emptyState(loaded ? 'NO PREDICTIONS' : 'LOADING…'));
-      return;
-    }
-    sheetRows.replaceChildren(renderGroups(rows));
+    sheetRows.replaceChildren(emptyState(label));
   }
 
   /**
