@@ -34,7 +34,7 @@ export default async function handler(req, res) {
       res.status(400).json({ error: 'unsupported bus API method' });
       return;
     }
-    if (!consumeBudget(res)) return;
+    if (!consumeBudget(res, 'bus')) return;
     const target = new URL(`https://www.ctabustracker.com/bustime/api/v3/${sub.toLowerCase()}`);
     incoming.searchParams.forEach((v, k) => {
       if (k === 'key' || isRouteParam(k)) return;

@@ -7,6 +7,8 @@ import {
   createRateLimiter,
   createDailyBudget,
   DAILY_BUDGET,
+  BUDGET_CEILINGS,
+  createNamedBudgets,
   isAllowedBusMethod,
   isRouteParam,
   busCacheControl,
@@ -254,6 +256,28 @@ describe('busCacheControl', () => {
   });
 });
 
+describe('named budgets', () => {
+  it('caps tt, arrivals, and bus on separate ledgers that sum to 8000', () => {
+    expect(BUDGET_CEILINGS).toEqual({ tt: 5_000, arrivals: 1_000, bus: 2_000 });
+    expect(DAILY_BUDGET).toBe(8_000);
+
+    const budgets = createNamedBudgets();
+    const busBefore = budgets.used('bus');
+
+    for (let i = 0; i < 5_000; i += 1) expect(budgets.consume('tt')).toBe(true);
+    expect(budgets.consume('tt')).toBe(false);
+    expect(budgets.used('bus')).toBe(busBefore);
+
+    for (let i = 0; i < 1_000; i += 1) expect(budgets.consume('arrivals')).toBe(true);
+    expect(budgets.consume('arrivals')).toBe(false);
+
+    for (let i = 0; i < 2_000; i += 1) expect(budgets.consume('bus')).toBe(true);
+    expect(budgets.consume('bus')).toBe(false);
+
+    expect(budgets.used('tt') + budgets.used('arrivals') + budgets.used('bus')).toBe(8_000);
+  });
+});
+
 describe('consumeBudget', () => {
   function res() {
     return {
@@ -270,23 +294,25 @@ describe('consumeBudget', () => {
     };
   }
 
-  it('spends one unit and writes 503 when the ceiling is met', () => {
-    const before = used();
+  it('spends one bus unit and writes 503 when the bus ceiling is met', () => {
+    const before = used('bus');
     expect(consumeBudget(res())).toBe(true);
-    expect(used()).toBe(before + 1);
+    expect(used('bus')).toBe(before + 1);
+    expect(used('tt')).toBe(0);
 
     const ok = res();
-    const room = DAILY_BUDGET - used();
+    const room = BUDGET_CEILINGS.bus - used('bus');
     let accepted = 0;
     for (let i = 0; i < room; i += 1) {
-      if (consumeBudget(ok)) accepted += 1;
+      if (consumeBudget(ok, 'bus')) accepted += 1;
     }
     expect(accepted).toBe(room);
 
     const denied = res();
-    expect(consumeBudget(denied)).toBe(false);
+    expect(consumeBudget(denied, 'bus')).toBe(false);
     expect(denied.statusCode).toBe(503);
     expect(denied.body).toEqual({ error: 'daily budget reached' });
-    expect(used()).toBe(DAILY_BUDGET);
+    expect(used('bus')).toBe(BUDGET_CEILINGS.bus);
+    expect(used('tt')).toBe(0);
   });
 });

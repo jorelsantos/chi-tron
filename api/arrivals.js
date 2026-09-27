@@ -4,7 +4,7 @@
 import { guardRequest, TRAIN_ARRIVALS_CACHE } from './_guard.js';
 
 export default async function handler(req, res) {
-  if (!guardRequest(req, res)) return;
+  if (!guardRequest(req, res, { budget: 'arrivals' })) return;
   const key = process.env.CTA_KEY;
   if (!key) {
     res.status(500).json({ error: 'CTA_KEY not configured' });
