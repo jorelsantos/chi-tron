@@ -116,11 +116,12 @@ async function boot() {
   const busArrivals = new BusArrivalsSession();
 
   let bikeStationsReady = false;
+  let bikeStationsFailed = false;
   /** @type {Promise<void>|null} */
   let bikeLoadInFlight = null;
 
   function ensureBikeData() {
-    if (bikeStationsReady) return Promise.resolve();
+    if (bikeStationsReady || bikeStationsFailed) return Promise.resolve();
     if (bikeLoadInFlight) return bikeLoadInFlight;
     bikeLoadInFlight = (async () => {
       try {
@@ -145,8 +146,8 @@ async function boot() {
       } catch (err) {
         console.warn('[chi-tron] divvy-stations.json failed:', err?.message || err);
         bikeStationsReady = false;
-        // Allow retry on next ensureBikeData() call.
-        bikeLoadInFlight = null;
+        bikeStationsFailed = true;
+        browse.onBikeDataChange();
       }
     })();
     return bikeLoadInFlight;
@@ -208,6 +209,7 @@ async function boot() {
       }));
     },
     bikeReady: () => bikeStationsReady,
+    bikeFailed: () => bikeStationsFailed,
     ensureBikeData,
     onOpenStation: (station, opts) => board.openStation(station, opts),
     onOpenBusStop: (stop, opts) => board.openBusStop(stop, opts),
