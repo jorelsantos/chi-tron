@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeBusPredictions,
   parseBusPrdtm,
+  formatBusClock,
   groupBusByDirection,
 } from './bus-arrivals.js';
 
@@ -9,6 +10,32 @@ describe('bus-arrivals', () => {
   it('parseBusPrdtm returns finite ms', () => {
     const ms = parseBusPrdtm('20260808 14:30');
     expect(Number.isFinite(ms)).toBe(true);
+  });
+
+  it('formats prdtm as Chicago wall time', () => {
+    expect(formatBusClock(parseBusPrdtm('20260808 14:30'))).toBe('2:30 PM');
+    expect(formatBusClock(parseBusPrdtm('20260308 03:30'))).toBe('3:30 AM');
+  });
+
+  it('keeps numeric minutes beside the Chicago clock', () => {
+    const rows = normalizeBusPredictions({
+      'bustime-response': {
+        prd: [
+          {
+            rt: '22',
+            rtdir: 'Northbound',
+            des: 'Clark',
+            prdctdn: '4',
+            prdtm: '20260808 14:30',
+            stpid: '1',
+            dly: false,
+          },
+        ],
+      },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].minutes).toBe(4);
+    expect(rows[0].clock).toBe('2:30 PM');
   });
 
   it('normalizeBusPredictions filters by rt and sorts', () => {

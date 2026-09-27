@@ -1,5 +1,6 @@
 // CTA Bus Tracker getpredictions → board rows (mirrors arrivals.js shape).
 
+import { formatClock, parseChicagoArrT } from './arrivals.js';
 import { Poller, DEFAULT_DAILY_CEILING } from './poller.js';
 
 const BUS_ARRIVALS_LEDGER = 'cta-bus';
@@ -55,22 +56,16 @@ export function normalizeBusPredictions(data, opts = {}) {
   return rows;
 }
 
-/** CTA prdtm "yyyyMMdd HH:mm" as Chicago wall → epoch ms (best effort). */
+/** CTA prdtm "yyyyMMdd HH:mm" as Chicago wall time → epoch ms. */
 export function parseBusPrdtm(prdtm) {
   const m = String(prdtm).match(/^(\d{4})(\d{2})(\d{2})\s+(\d{2}):(\d{2})/);
   if (!m) return null;
   const [, y, mo, d, h, mi] = m;
-  // Interpret as local machine time if already in Chicago; OK for display deltas.
-  const ms = Date.parse(`${y}-${mo}-${d}T${h}:${mi}:00`);
-  return Number.isFinite(ms) ? ms : null;
+  return parseChicagoArrT(`${y}-${mo}-${d}T${h}:${mi}:00`);
 }
 
 export function formatBusClock(arrMs) {
-  if (!Number.isFinite(arrMs)) return '';
-  return new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(arrMs));
+  return formatClock(arrMs);
 }
 
 export function groupBusByDirection(rows) {
