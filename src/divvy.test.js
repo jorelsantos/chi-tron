@@ -300,14 +300,86 @@ describe('DivvyEngine', () => {
     expect(engine.stations).toHaveLength(2);
   });
 
-  it('does not self-heal at 0% drift', () => {
+  it('does not self-heal at 0% drift', async () => {
     const engine = new DivvyEngine([{ id: 'a', name: 'A', lat: 41, lon: -87, capacity: 5 }]);
-    expect(
-      engine.driftRatio({
+    const status = {
+      data: {
+        stations: [{ station_id: 'a', num_bikes_available: 1, num_ebikes_available: 0 }],
+      },
+    };
+    expect(engine.driftRatio(status)).toBe(0);
+    const fetchMock = vi.fn();
+    await engine.maybeHeal(status, fetchMock);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('heals one unknown dock once and joins it', async () => {
+    const bake = Array.from({ length: 100 }, (_, i) => ({
+      id: `dock-${i}`,
+      name: `Dock ${i}`,
+      lat: 41.8,
+      lon: -87.6,
+      capacity: 10,
+    }));
+    const knownRows = bake.map((s) => ({
+      station_id: s.id,
+      num_bikes_available: 1,
+      num_ebikes_available: 0,
+      num_docks_available: 1,
+      is_installed: 1,
+      is_renting: 1,
+      is_returning: 1,
+      last_reported: 1,
+    }));
+    const status = {
+      data: {
+        stations: [
+          ...knownRows,
+          {
+            station_id: 'new-dock',
+            num_bikes_available: 3,
+            num_ebikes_available: 1,
+            num_docks_available: 4,
+            is_installed: 1,
+            is_renting: 1,
+            is_returning: 1,
+            last_reported: 1,
+          },
+        ],
+      },
+    };
+    const engine = new DivvyEngine(bake);
+    expect(engine.driftRatio(status)).toBeGreaterThan(0);
+    expect(engine.driftRatio(status)).toBeLessThan(0.02);
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
         data: {
-          stations: [{ station_id: 'a', num_bikes_available: 1, num_ebikes_available: 0 }],
+          stations: [
+            ...bake.map((s) => ({
+              station_id: s.id,
+              name: s.name,
+              lat: s.lat,
+              lon: s.lon,
+              capacity: s.capacity,
+            })),
+            {
+              station_id: 'new-dock',
+              name: 'New Dock',
+              lon: -87.63,
+              lat: 41.88,
+              capacity: 12,
+            },
+          ],
         },
       }),
-    ).toBe(0);
+    }));
+    await engine.maybeHeal(status, fetchMock);
+    await engine.maybeHeal(status, fetchMock);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/divvy/station_information.json');
+    const joined = joinStatus(engine.stations, status);
+    const dock = joined.find((s) => s.id === 'new-dock');
+    expect(dock).toMatchObject({ id: 'new-dock', lon: -87.63, lat: 41.88 });
   });
 });
