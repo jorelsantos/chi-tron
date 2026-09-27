@@ -38,6 +38,25 @@ import {
 } from './browse-titles.js';
 import { bikeStatusMeta } from './bike-status.js';
 
+/** DOM budget for one bike list. The caption names the rows this cap hides. */
+const BIKE_LIST_CAP = 200;
+
+/**
+ * First rows of an already-sorted list, plus SHOWING n OF m.
+ * A search passes the filtered list, so m is that length.
+ * @param {object[]} list
+ * @returns {{ shown: object[], total: number, caption: string }}
+ */
+export function capBikeList(list) {
+  const total = list.length;
+  const shown = list.slice(0, BIKE_LIST_CAP);
+  return {
+    shown,
+    total,
+    caption: `SHOWING ${shown.length} OF ${total}`,
+  };
+}
+
 /**
  * @param {object} deps
  * @param {() => Record<string, object>} deps.getStations snapped station index
@@ -211,10 +230,12 @@ export function createBrowse({
       showEmpty(browseList, q ? 'NO MATCH' : 'NO STATIONS');
       return;
     }
-    // Cap list length for DOM budget; search narrows.
-    const shown = list.slice(0, 200);
+    const capped = capBikeList(list);
+    const caption = document.createElement('div');
+    caption.className = 'sheet-empty';
+    caption.textContent = capped.caption;
     browseList.replaceChildren(
-      ...shown.map((st) => {
+      ...capped.shown.map((st) => {
         return browseRow({
           name: st.name || st.id,
           meta: bikeStatusMeta(st),
@@ -222,6 +243,7 @@ export function createBrowse({
           onClick: () => onOpenBikeStation(st, { source: 'stations' }),
         });
       }),
+      caption,
     );
   }
 
