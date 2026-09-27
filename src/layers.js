@@ -244,15 +244,14 @@ const ACCESSIBILITY_GLYPH_COLOR = [255, 190, 60];
 // every caller that doesn't pass one.
 const EMPTY_SET = new Set();
 
-// Stations only change when a line is toggled or the DISPLAY toggle flips —
-// essentially never, frame-to-frame. Recomputing the ridership-filtered list
-// from scratch every frame (60x/sec) is pure waste, so it's cached here
-// against a cheap signature of the two things that can actually change it.
+// The shown list is stable across frames. It changes when the visible lines
+// change or when stations.json arrives after the first frame. The cache key
+// includes the station count so a late file replaces the empty list.
 let stationsCacheKey = null;
 let stationsCache = [];
 function getShownStations(stations, visibleLines, display) {
   if (!display.stations) return [];
-  const key = `${[...visibleLines].sort().join(',')}`;
+  const key = `${Object.keys(stations).length}|${[...visibleLines].sort().join(',')}`;
   if (key !== stationsCacheKey) {
     stationsCacheKey = key;
     stationsCache = Object.values(stations).filter((s) => s.lines.some((l) => visibleLines.has(l)));

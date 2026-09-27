@@ -264,6 +264,55 @@ describe('buildLayers divvy dots', () => {
   });
 });
 
+describe('buildLayers late stations file', () => {
+  const on = { trains: false, stations: true };
+
+  function ringIds(layers) {
+    return layerById(layers, 'station-ring').props.data.map((mark) => mark.id);
+  }
+
+  it('draws marks after stations arrive and when the visible line changes', () => {
+    const empty = buildLayers([], 0, new Set(['Y']), { stations: {}, display: on });
+    expect(ringIds(empty)).toEqual([]);
+
+    const late = buildLayers([], 0, new Set(['Y']), {
+      stations: {
+        'late-station': {
+          id: 'late-station',
+          coords: [-87.747221, 42.026243],
+          lines: ['Y'],
+        },
+      },
+      display: on,
+    });
+    expect(ringIds(late)).toEqual(['late-station']);
+
+    const red = buildLayers([], 0, new Set(['Red']), {
+      stations: {
+        'red-station': {
+          id: 'red-station',
+          coords: [-87.627596, 41.878153],
+          lines: ['Red'],
+        },
+      },
+      display: on,
+    });
+    expect(ringIds(red)).toEqual(['red-station']);
+
+    const hidden = buildLayers([], 0, new Set(['Red']), {
+      stations: {
+        'red-station': {
+          id: 'red-station',
+          coords: [-87.627596, 41.878153],
+          lines: ['Red'],
+        },
+      },
+      display: { trains: false, stations: false },
+    });
+    expect(ringIds(hidden)).toEqual([]);
+  });
+});
+
 describe('buildLayers car layer (U11)', () => {
   const visibleLines = new Set(['Red']);
   const cars = [{ pos: [-87.6, 41.9], heading: 90 }];
