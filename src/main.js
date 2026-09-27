@@ -19,7 +19,7 @@ import { buildLayers, LINE_COLORS, lineStressTreatment } from './layers.js';
 import { createHud } from './hud.js';
 import { ArrivalsSession } from './arrivals.js';
 import { BusArrivalsSession } from './bus-arrivals.js';
-import { startWatch, nearestStation, walkMinutes } from './geolocation.js';
+import { armLocationWatch, nearestStation, startWatch, walkMinutes } from './geolocation.js';
 import { snapStationsToRails } from './stations-rail.js';
 import { liveLineKeys, liveStationsUnion } from './catalog.js';
 import { activeSurface, searchFabAction, dismissTopAction } from './ui-nav.js';
@@ -285,7 +285,6 @@ async function boot() {
   const nearestChip = document.getElementById('nearest-chip');
   const locChip = document.getElementById('loc-chip');
   let userFix = null;
-  let geoWatch = null;
 
   // Walk distance uses GTFS (entrance) coords; map markers use snapped coords.
   const liveStationsForWalk = () =>
@@ -306,25 +305,39 @@ async function boot() {
     nearestChip.onclick = () => board.openStation(hit.station, { source: 'map' });
   }
 
+  const locationWatch = armLocationWatch({
+    start({ onError, onFix }) {
+      return startWatch({
+        highAccuracy: true,
+        onFix: (fix) => {
+          userFix = fix;
+          updateNearestChip();
+          if (stage.followMe && fix) {
+            map.easeTo({ center: [fix.lon, fix.lat], duration: 400, essential: true });
+          }
+          onFix(fix);
+        },
+        onError: (err) => {
+          console.warn('[chi-tron] geolocation:', err.message || err.code);
+          onError(err);
+        },
+      });
+    },
+    onOff() {
+      if (locChip) {
+        locChip.textContent = 'LOCATION OFF';
+        locChip.classList.add('visible');
+      }
+      stage.followMe = false;
+    },
+    onFix() {
+      locChip?.classList.remove('visible');
+    },
+  });
+
   function enableLocation() {
-    if (geoWatch) return;
-    locChip?.classList.remove('visible');
-    geoWatch = startWatch({
-      highAccuracy: true,
-      onFix: (fix) => {
-        userFix = fix;
-        updateNearestChip();
-        if (stage.followMe && fix) {
-          map.easeTo({ center: [fix.lon, fix.lat], duration: 400, essential: true });
-        }
-      },
-      onError: (err) => {
-        console.warn('[chi-tron] geolocation:', err.message || err.code);
-        locChip?.classList.add('visible');
-        if (locChip) locChip.textContent = 'LOCATION OFF';
-        stage.followMe = false;
-      },
-    });
+    const watch = locationWatch.enable();
+    if (!watch) return;
     stage.followMe = true;
     releaseFollow();
   }
