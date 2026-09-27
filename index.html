@@ -400,12 +400,6 @@
       box-shadow: 0 0 10px rgba(0, 212, 255, 0.7);
     }
 
-    /* Live Nav — map-first chrome (Maps / Pokémon Go).
-       Hide instrument dock by default (not only after JS .nav-compact). */
-    #sidebar,
-    #sidebar.nav-compact {
-      display: none;
-    }
     /* Hide chrome when board open so board is clean */
     @media (max-width: 899px) {
       body:has(#station-sheet.open) #hud-top,
@@ -600,7 +594,15 @@
         0 0 20px rgba(0, 212, 255, 0.22) !important;
     }
     @media (max-width: 720px) {
-      #sidebar { display: none !important; }
+      #sidebar {
+        display: flex;
+        left: 16px;
+        right: 16px;
+        top: auto;
+        bottom: 16px;
+        width: auto;
+        max-height: 40vh;
+      }
     }
 
     /* Thumb dock: kind column + isolated locate */
