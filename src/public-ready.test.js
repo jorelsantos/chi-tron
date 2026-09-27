@@ -43,6 +43,11 @@ describe('public-ready chrome', () => {
     expect(pngSize('public/icon-512.png')).toEqual({ width: 512, height: 512 });
   });
 
+  it('moves the nearest chip below an open station sheet', () => {
+    expect(html).toContain('body:has(#station-sheet.open) #nearest-chip');
+    expect(html).not.toContain('#station-sheet.open ~ #nearest-chip');
+  });
+
   it('ships a standalone manifest', () => {
     const manifest = JSON.parse(readFileSync(join(root, 'public/manifest.webmanifest'), 'utf8'));
     expect(manifest.display).toBe('standalone');
