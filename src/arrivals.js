@@ -139,12 +139,11 @@ export function normalizeArrivals(data, opts = {}) {
 }
 
 /**
- * Normalize CTA direction text → short board section titles.
- * @param {object} r
- * @returns {{ title: string, key: string, kind: string }}
+ * Keyword tests for a direction string. First match wins.
+ * @param {string} raw lowercased stop or destination text
+ * @returns {{ title: string, key: string, kind: string }|null}
  */
-export function directionLabel(r) {
-  const raw = `${r?.stpDe || ''} ${r?.destNm || ''}`.toLowerCase();
+function matchDirectionKeywords(raw) {
   if (raw.includes('midway')) {
     return { title: 'TO MIDWAY', key: 'midway', kind: 'midway' };
   }
@@ -184,6 +183,26 @@ export function directionLabel(r) {
   if (raw.includes('loop') || raw.includes('downtown') || raw.includes('clark/lake')) {
     return { title: 'TO LOOP', key: 'loop', kind: 'loop' };
   }
+  return null;
+}
+
+/**
+ * Normalize CTA direction text → short board section titles.
+ * A destination name is tested alone first, so a split terminal
+ * ("Howard or Linden") follows destNm instead of the earlier keyword.
+ * An empty destNm keeps the joined stpDe and destNm order.
+ * @param {object} r
+ * @returns {{ title: string, key: string, kind: string }}
+ */
+export function directionLabel(r) {
+  const destNm = String(r?.destNm ?? '').trim();
+  if (destNm) {
+    const fromDest = matchDirectionKeywords(destNm.toLowerCase());
+    if (fromDest) return fromDest;
+  }
+  const raw = `${r?.stpDe || ''} ${r?.destNm || ''}`.toLowerCase();
+  const fromJoined = matchDirectionKeywords(raw);
+  if (fromJoined) return fromJoined;
   if (r?.destNm) {
     const dest = String(r.destNm).trim();
     return { title: `TO ${dest.toUpperCase()}`, key: dest.toLowerCase(), kind: 'other' };
