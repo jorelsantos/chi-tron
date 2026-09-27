@@ -672,7 +672,7 @@
     #loc-chip {
       color: var(--type-secondary); cursor: default;
     }
-    #station-sheet.open ~ #nearest-chip {
+    body:has(#station-sheet.open) #nearest-chip {
       top: calc(var(--safe-t) + min(68vh, 560px) + 10px);
     }
     /* Maps pattern: board owns thumb zone — fade FABs when open */
@@ -1267,7 +1267,7 @@
       #nearest-chip, #loc-chip {
         left: 18px; right: auto; width: auto; max-width: 360px;
       }
-      #station-sheet.open ~ #nearest-chip {
+      body:has(#station-sheet.open) #nearest-chip {
         top: auto; bottom: 28px;
       }
     }
