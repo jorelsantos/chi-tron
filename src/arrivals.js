@@ -30,7 +30,6 @@ export function parseChicagoArrT(arrT) {
   // Use temporal-ish approach: format a UTC guess and adjust — simpler:
   // Intl: build ISO with forced offset by comparing Chicago parts.
   const utcGuess = Date.UTC(+y, +mo - 1, +d, +h, +mi, +s);
-  // Figure Chicago offset at that instant
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: CHICAGO_TZ,
     year: 'numeric',
@@ -41,20 +40,31 @@ export function parseChicagoArrT(arrT) {
     second: '2-digit',
     hourCycle: 'h23',
   });
-  // Binary-search offset: evaluate what Chicago shows for utcGuess, diff from desired
-  const parts = Object.fromEntries(
-    fmt.formatToParts(new Date(utcGuess)).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]),
-  );
-  const asUtc = Date.UTC(
-    +parts.year,
-    +parts.month - 1,
-    +parts.day,
-    +parts.hour,
-    +parts.minute,
-    +parts.second,
-  );
-  const offset = asUtc - utcGuess;
-  return utcGuess - offset;
+  const offsetAt = (instant) => {
+    const parts = Object.fromEntries(
+      fmt.formatToParts(new Date(instant)).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]),
+    );
+    const asUtc = Date.UTC(
+      +parts.year,
+      +parts.month - 1,
+      +parts.day,
+      +parts.hour,
+      +parts.minute,
+      +parts.second,
+    );
+    return asUtc - instant;
+  };
+  // A single check uses the offset on the wrong side of a DST change.
+  // Repeat at the corrected instant until that offset stops changing.
+  let offset = offsetAt(utcGuess);
+  let corrected = utcGuess - offset;
+  for (let pass = 0; pass < 4; pass += 1) {
+    const next = offsetAt(corrected);
+    if (next === offset) break;
+    offset = next;
+    corrected = utcGuess - offset;
+  }
+  return corrected;
 }
 
 /**

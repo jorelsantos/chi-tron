@@ -57,6 +57,14 @@ describe('arrivals normalize', () => {
     expect(formatClock(ms).length).toBeGreaterThan(0);
   });
 
+  it('parses Chicago arrival times through daylight saving', () => {
+    expect(formatClock(parseChicagoArrT('2026-03-08T03:30:00'))).toBe('3:30 AM');
+    expect(formatClock(parseChicagoArrT('2026-03-08T04:00:00'))).toBe('4:00 AM');
+    expect(formatClock(parseChicagoArrT('2026-11-01T04:00:00'))).toBe('4:00 AM');
+    expect(formatClock(parseChicagoArrT('2026-03-08T12:00:00'))).toBe('12:00 PM');
+    expect(formatClock(parseChicagoArrT('2026-07-15T12:00:00'))).toBe('12:00 PM');
+  });
+
   it('groupArrivalsByDirection splits Midway vs Loop', () => {
     const data = JSON.parse(readFileSync(FIXTURE, 'utf8'));
     const rows = normalizeArrivals(data, { rtFilter: 'org', nowMs: Date.now() });
