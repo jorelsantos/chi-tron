@@ -9,8 +9,8 @@ import { Poller } from './poller.js';
 const POLL_MS = 60000;
 const STATUS_URL = '/api/divvy/station_status.json';
 const INFO_URL = '/api/divvy/station_information.json';
-/** Re-fetch station_information once if this fraction of status ids is unbaked. */
-export const BAKE_DRIFT_THRESHOLD = 0.02;
+/** Re-fetch station_information once when driftRatio is above this value. */
+export const BAKE_DRIFT_THRESHOLD = 0;
 
 /**
  * @typedef {{id: string, name: string, lat: number, lon: number, capacity: number}} DivvyStation
