@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { guardRequest } from './_guard.js';
+import { guardRequest, used } from './_guard.js';
 import busHandler from './bus/[...path].js';
 import ttHandler from './tt.js';
 import alertsHandler, { isAllowedAlertEndpoint } from './alerts/[...path].js';
@@ -189,6 +189,35 @@ describe('bus proxy handler', () => {
     await busHandler(browserReq({ url: '/api/bus/getpatterns', query: { path: 'getpatterns' } }), res);
     expect(res.statusCode).toBe(400);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not charge the daily budget for a rejected method, then charges an allowed one', async () => {
+    const before = used();
+    const rejected = mockRes();
+    await busHandler(
+      browserReq({ url: '/api/bus/getpatterns', query: { path: 'getpatterns' } }),
+      rejected,
+    );
+    expect(rejected.statusCode).toBe(400);
+    expect(used()).toBe(before);
+
+    const allowed = mockRes();
+    await busHandler(
+      browserReq({ url: '/api/bus/getvehicles', query: { path: 'getvehicles' } }),
+      allowed,
+    );
+    expect(allowed.statusCode).toBe(200);
+    expect(used()).toBe(before + 1);
+  });
+
+  it('does not charge the daily budget when the request has no origin', async () => {
+    const before = used();
+    const req = browserReq({ url: '/api/bus/getpatterns', query: { path: 'getpatterns' } });
+    delete req.headers.referer;
+    const res = mockRes();
+    await busHandler(req, res);
+    expect(res.statusCode).toBe(403);
+    expect(used()).toBe(before);
   });
 
   it('blocks an unauthorized caller before it ever touches CTA', async () => {

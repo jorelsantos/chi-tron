@@ -12,6 +12,8 @@ import {
   busCacheControl,
   BUS_VEHICLES_CACHE,
   BUS_PREDICTIONS_CACHE,
+  consumeBudget,
+  used,
 } from './_guard.js';
 
 describe('hostOf', () => {
@@ -249,5 +251,42 @@ describe('busCacheControl', () => {
   it('does not cache upstream errors', () => {
     expect(busCacheControl('getvehicles', 502)).toBe('no-store');
     expect(busCacheControl('getpredictions', 500)).toBe('no-store');
+  });
+});
+
+describe('consumeBudget', () => {
+  function res() {
+    return {
+      statusCode: null,
+      body: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        this.body = payload;
+        return this;
+      },
+    };
+  }
+
+  it('spends one unit and writes 503 when the ceiling is met', () => {
+    const before = used();
+    expect(consumeBudget(res())).toBe(true);
+    expect(used()).toBe(before + 1);
+
+    const ok = res();
+    const room = DAILY_BUDGET - used();
+    let accepted = 0;
+    for (let i = 0; i < room; i += 1) {
+      if (consumeBudget(ok)) accepted += 1;
+    }
+    expect(accepted).toBe(room);
+
+    const denied = res();
+    expect(consumeBudget(denied)).toBe(false);
+    expect(denied.statusCode).toBe(503);
+    expect(denied.body).toEqual({ error: 'daily budget reached' });
+    expect(used()).toBe(DAILY_BUDGET);
   });
 });

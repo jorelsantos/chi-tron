@@ -2,10 +2,10 @@
 // Catch-all so /api/bus/getvehicles and /api/bus/getpredictions both hit this
 // function (api/bus.js alone only mounts /api/bus on Vercel).
 
-import { guardRequest, isAllowedBusMethod, isRouteParam, busCacheControl } from '../_guard.js';
+import { guardRequest, isAllowedBusMethod, isRouteParam, busCacheControl, consumeBudget } from '../_guard.js';
 
 export default async function handler(req, res) {
-  if (!guardRequest(req, res)) return;
+  if (!guardRequest(req, res, { metered: false })) return;
   const key = process.env.CTA_BUS_KEY;
   if (!key) {
     res.status(500).json({ error: 'CTA_BUS_KEY not configured' });
@@ -34,6 +34,7 @@ export default async function handler(req, res) {
       res.status(400).json({ error: 'unsupported bus API method' });
       return;
     }
+    if (!consumeBudget(res)) return;
     const target = new URL(`https://www.ctabustracker.com/bustime/api/v3/${sub.toLowerCase()}`);
     incoming.searchParams.forEach((v, k) => {
       if (k === 'key' || isRouteParam(k)) return;
