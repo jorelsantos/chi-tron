@@ -49,3 +49,29 @@ export function dismissTopAction(surface) {
   if (surface === 'browse') return 'close-browse';
   return 'none';
 }
+
+/**
+ * Closed dialogs stay out of the tab order. Open dialogs are modal.
+ * @param {boolean} isOpen
+ * @returns {{ inert: boolean, modal: boolean }}
+ */
+export function dialogPresence(isOpen) {
+  return {
+    inert: !isOpen,
+    modal: isOpen,
+  };
+}
+
+/**
+ * Write `dialogPresence` onto a dialog element.
+ * @param {HTMLElement|null|undefined} el
+ * @param {boolean} isOpen
+ */
+export function applyDialogPresence(el, isOpen) {
+  if (!el) return;
+  const presence = dialogPresence(isOpen);
+  if (presence.inert) el.setAttribute('inert', '');
+  else el.removeAttribute('inert');
+  if (presence.modal) el.setAttribute('aria-modal', 'true');
+  else el.removeAttribute('aria-modal');
+}

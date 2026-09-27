@@ -4,6 +4,7 @@ import {
   listFabAction,
   searchFabAction,
   dismissTopAction,
+  dialogPresence,
 } from './ui-nav.js';
 
 describe('activeSurface', () => {
@@ -51,5 +52,14 @@ describe('dismissTopAction', () => {
   });
   it('no-op on map', () => {
     expect(dismissTopAction('map')).toBe('none');
+  });
+});
+
+describe('dialogPresence', () => {
+  it('keeps a closed dialog out of the tab order', () => {
+    expect(dialogPresence(false)).toEqual({ inert: true, modal: false });
+  });
+  it('makes an open dialog modal', () => {
+    expect(dialogPresence(true)).toEqual({ inert: false, modal: true });
   });
 });

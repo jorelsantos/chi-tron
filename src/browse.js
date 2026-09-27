@@ -37,6 +37,7 @@ import {
   thumbIndexFromRatio,
 } from './browse-titles.js';
 import { bikeStatusMeta } from './bike-status.js';
+import { applyDialogPresence } from './ui-nav.js';
 
 /** DOM budget for one bike list. The caption names the rows this cap hides. */
 const BIKE_LIST_CAP = 200;
@@ -386,6 +387,7 @@ export function createBrowse({
 
   function close() {
     browseEl?.classList.remove('open');
+    applyDialogPresence(browseEl, false);
     browseEl?.classList.remove('mode-search');
     browseEl?.classList.remove('mode-bus-list');
     browseEl?.classList.remove('mode-bike-list');
@@ -405,6 +407,7 @@ export function createBrowse({
     if (isBoardOpen()) closeBoard();
     mode = nextMode;
     browseEl?.classList.add('open');
+    applyDialogPresence(browseEl, true);
     const showBusSearch = kind === 'bus' && nextMode === 'lines';
     const showBikeSearch = kind === 'bike' && nextMode === 'lines';
     browseEl?.classList.toggle('mode-search', nextMode === 'search' && kind === 'train');
