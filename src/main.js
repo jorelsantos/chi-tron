@@ -201,8 +201,6 @@ async function boot() {
       if (live.length) return live;
       return divvyEngine.stations.map((s) => ({
         ...s,
-        classic: 0,
-        ebikes: 0,
         docks: s.capacity || 0,
         renting: true,
         returning: true,

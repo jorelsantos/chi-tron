@@ -22,6 +22,22 @@ describe('bikeStatusMeta', () => {
       { text: 'NOT RENTING', tone: 'bad' },
     ]);
   });
+
+  it('shows WAITING when both bike counts are missing', () => {
+    expect(bikeStatusMeta({})).toEqual([{ text: 'WAITING', tone: 'dim' }]);
+  });
+
+  it('shows NOT RENTING when renting is false and counts are missing', () => {
+    expect(bikeStatusMeta({ renting: false })).toEqual([{ text: 'NOT RENTING', tone: 'bad' }]);
+  });
+
+  it('keeps 0 BIKES and docks after a real zero poll', () => {
+    expect(bikeStatusMeta({ classic: 0, ebikes: 0, docks: 3, renting: true })).toEqual([
+      { text: '0 BIKES', tone: 'bad' },
+      { text: '·', tone: 'dim' },
+      { text: '3 DOCKS', tone: 'dock' },
+    ]);
+  });
 });
 
 describe('count tones', () => {

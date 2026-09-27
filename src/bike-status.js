@@ -5,6 +5,9 @@
  */
 export function bikeStatusMeta(st) {
   if (st?.renting === false) return [{ text: 'NOT RENTING', tone: 'bad' }];
+  if (st?.classic == null && st?.ebikes == null) {
+    return [{ text: 'WAITING', tone: 'dim' }];
+  }
   const bikes = (st?.classic || 0) + (st?.ebikes || 0);
   const docks = Number.isFinite(st?.docks) ? st.docks : 0;
   return [
