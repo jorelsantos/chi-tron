@@ -332,6 +332,38 @@ describe('alerts proxy handler', () => {
     );
     expect(res.headers['cache-control']).toContain('s-maxage=60');
   });
+
+  it('does not store an upstream 500', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      headers: { get: () => 'application/json' },
+      text: async () => '{"err":"cta"}',
+    });
+    const res = mockRes();
+    await alertsHandler(
+      browserReq({ url: '/api/alerts/routes.aspx', query: { path: 'routes.aspx' } }),
+      res,
+    );
+    expect(res.statusCode).toBe(500);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('keeps the shared cache on an upstream 200', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      text: async () => '{"ok":true}',
+    });
+    const res = mockRes();
+    await alertsHandler(
+      browserReq({ url: '/api/alerts/routes.aspx', query: { path: 'routes.aspx' } }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('public, max-age=0, s-maxage=60');
+  });
 });
 
 describe('divvy proxy handler', () => {

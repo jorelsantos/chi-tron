@@ -59,7 +59,13 @@ export default async function handler(req, res) {
     // Alerts change on the order of minutes, not seconds. A short shared cache
     // collapses every viewer's 2-minute poll into one upstream request per
     // window, which is what lets this endpoint stay unmetered.
-    res.setHeader('cache-control', 'public, max-age=0, s-maxage=60');
+    // Errors stay uncached so a brief CTA blip does not freeze for 60s.
+    res.setHeader(
+      'cache-control',
+      upstream.status >= 200 && upstream.status < 300
+        ? 'public, max-age=0, s-maxage=60'
+        : 'no-store',
+    );
     res.send(body);
   } catch (err) {
     res.status(502).json({ error: err?.message || 'upstream failed' });
