@@ -7,6 +7,7 @@ import {
   parseChicagoArrT,
   minutesUntil,
   formatClock,
+  directionLabel,
   groupArrivalsByDirection,
   groupArrivalsByLineThenDirection,
   lineKeyFromRt,
@@ -55,6 +56,25 @@ describe('arrivals normalize', () => {
   it('formatClock returns a string', () => {
     const ms = parseChicagoArrT('2026-08-08T12:29:01');
     expect(formatClock(ms).length).toBeGreaterThan(0);
+  });
+
+  it('groups a split terminal by its destination', () => {
+    expect(directionLabel({
+      stpDe: 'Service toward Howard or Linden',
+      destNm: 'Linden',
+    }).title).toBe('TO LINDEN');
+    expect(directionLabel({
+      stpDe: 'Service toward Howard or Linden',
+      destNm: 'Howard',
+    }).title).toBe('TO HOWARD');
+    expect(directionLabel({
+      stpDe: 'Service toward 95th or Loop',
+      destNm: 'Loop',
+    }).title).toBe('TO LOOP');
+    expect(directionLabel({
+      stpDe: 'Howard',
+      destNm: '',
+    }).title).toBe('TO HOWARD');
   });
 
   it('parses Chicago arrival times through daylight saving', () => {
