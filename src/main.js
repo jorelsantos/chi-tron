@@ -22,7 +22,7 @@ import { BusArrivalsSession } from './bus-arrivals.js';
 import { armLocationWatch, nearestStation, startWatch, walkMinutes } from './geolocation.js';
 import { snapStationsToRails } from './stations-rail.js';
 import { liveLineKeys, liveStationsUnion } from './catalog.js';
-import { activeSurface, searchFabAction, dismissTopAction } from './ui-nav.js';
+import { activeSurface, searchFabAction, dismissTopAction, followTarget } from './ui-nav.js';
 import { createMapStage, TRACK_GLOW_LAYER_IDS } from './map-stage.js';
 import { createBusData } from './bus-data.js';
 import { createBoard } from './board.js';
@@ -384,7 +384,14 @@ async function boot() {
       if (info.layer?.id === 'train-cars-core') {
         const t = info.object;
         followVehicle('train', t.id, `${t.destNm || t.line || 'L'} · #${t.rn || '—'}`);
+        return;
       }
+      const busFollow = followTarget({
+        layerId: info.layer?.id,
+        id: info.object?.id,
+        rt: info.object?.rt,
+      });
+      if (busFollow) followVehicle(busFollow.kind, busFollow.id, busFollow.label);
     },
   });
 
@@ -423,7 +430,11 @@ async function boot() {
     const bounds = map.getBounds();
     const cars = carEngine.tick(now(), bounds);
 
-    if (followed) {
+    if (followed?.kind === 'bus') {
+      const bus = buses.find((v) => v.id === followed.id);
+      if (bus?.pos) map.setCenter(bus.pos);
+      else releaseFollow();
+    } else if (followed) {
       const vehicle = trains.find((v) => v.id === followed.id);
       if (vehicle?.pos) map.setCenter(alignTrainToRibbon(vehicle, map.getZoom()).pos);
       else releaseFollow();
