@@ -13,6 +13,7 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { now, TrainEngine } from './trains.js';
 import { BusEngine } from './buses.js';
+import { CarEngine, loadCarEngine } from './cars.js';
 import { AlertsEngine } from './alerts.js';
 import { buildLayers, LINE_COLORS, lineStressTreatment } from './layers.js';
 import { createHud } from './hud.js';
@@ -104,6 +105,10 @@ async function boot() {
 
   const engine = new TrainEngine(tracks);
   const busEngine = new BusEngine();
+  let carEngine = new CarEngine();
+  loadCarEngine(fetch).then((loaded) => {
+    carEngine = loaded;
+  });
   // Empty construct — cold open must not await bike bake (same rule as buses).
   const divvyEngine = new DivvyEngine();
   const alertsEngine = new AlertsEngine();
@@ -402,6 +407,8 @@ async function boot() {
     const trains = engine.tick();
     const buses = busData.mapReady ? busEngine.tick() : [];
     const bikes = bikeStationsReady ? divvyEngine.tick() : [];
+    const bounds = map.getBounds();
+    const cars = carEngine.tick(now(), bounds);
 
     if (followed) {
       const vehicle = trains.find((v) => v.id === followed.id);
@@ -430,11 +437,8 @@ async function boot() {
         buses,
         busTrailVersion: busEngine.trailVersion,
         viewportCenter: [center.lng, center.lat],
-        viewportBounds: (() => {
-          const b = map.getBounds();
-          return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-        })(),
-        cars: [],
+        viewportBounds: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
+        cars,
         bikes,
         zoom: map.getZoom(),
         lineStatus: alertsEngine.lineStatus,

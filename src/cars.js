@@ -212,8 +212,8 @@ export function advanceCar(car, edges, adjacency, nodes, dt, nowSeconds, rng = M
 export class CarEngine {
   /** @param {{nodes?: object, edges?: object[]}} roadsData the parsed
    * public/data/roads.json. An engine built from `{}` has zero edges and
-   * seeds no cars — main.js's guarded fetch passes that on a missing/failed
-   * roads.json so cars are simply absent rather than blocking boot. */
+   * seeds no cars — loadCarEngine returns that shape on a missing or failed
+   * roads.json so cars are absent and boot is not blocked. */
   constructor(roadsData = {}) {
     this.nodes = roadsData.nodes ?? {};
     this.edges = (roadsData.edges ?? []).map(prepareEdge);
@@ -280,5 +280,25 @@ export class CarEngine {
       advanceCar(car, this.edges, this.adjacency, this.nodes, dt, nowSeconds);
     }
     return [...this.cars.values()].filter((c) => c.pos);
+  }
+}
+
+/**
+ * Fetch `/data/roads.json`, build a CarEngine, and seed it.
+ * One car per edge, still capped inside seed(). A failed fetch returns an
+ * engine with no edges and does not throw.
+ * @param {typeof fetch} fetchImpl
+ */
+export async function loadCarEngine(fetchImpl) {
+  try {
+    const res = await fetchImpl('/data/roads.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const engine = new CarEngine(data);
+    engine.seed(engine.edges.length);
+    return engine;
+  } catch (err) {
+    console.warn('[chi-tron] roads.json failed to load, cars disabled:', err?.message || err);
+    return new CarEngine();
   }
 }

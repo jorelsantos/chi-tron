@@ -5,7 +5,15 @@
 // Built test-first per the plan's execution note for this unit.
 
 import { describe, it, expect } from 'vitest';
-import { CarEngine, CAR_CAP, buildAdjacency, isGreen, pickNextEdge, advanceCar } from './cars.js';
+import {
+  CarEngine,
+  CAR_CAP,
+  buildAdjacency,
+  isGreen,
+  pickNextEdge,
+  advanceCar,
+  loadCarEngine,
+} from './cars.js';
 
 // A straight 3-node north-south corridor, ~111m per hop (1/1000th of a
 // degree of latitude), both edges two-way. Real-shaped enough for the
@@ -181,5 +189,31 @@ describe('CarEngine', () => {
     engine.tick(1000.12, inView);
     const moved = car.edgeIdx !== edgeAtFreeze || Math.abs(car.dist - distAtFreeze) > 0;
     expect(moved).toBe(true);
+  });
+});
+
+describe('loadCarEngine', () => {
+  it('seeds one car from one edge and stays empty when the fetch fails', async () => {
+    const okFetch = async () => ({
+      ok: true,
+      json: async () => ({ nodes: NODES, edges: [RAW_EDGES[0]] }),
+    });
+    const engine = await loadCarEngine(okFetch);
+    expect(engine.cars.size).toBe(1);
+    expect(engine.edges).toHaveLength(1);
+    const [ticked] = engine.tick(0);
+    expect(ticked.id).toBe('car-0');
+
+    const failFetch = async () => {
+      throw new Error('offline');
+    };
+    const failed = await loadCarEngine(failFetch);
+    expect(failed.cars.size).toBe(0);
+    expect(failed.edges).toHaveLength(0);
+
+    const missingFetch = async () => ({ ok: false, status: 404 });
+    const missing = await loadCarEngine(missingFetch);
+    expect(missing.cars.size).toBe(0);
+    expect(missing.edges).toHaveLength(0);
   });
 });
