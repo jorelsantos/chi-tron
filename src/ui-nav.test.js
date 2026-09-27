@@ -5,6 +5,7 @@ import {
   searchFabAction,
   dismissTopAction,
   dialogPresence,
+  followTarget,
 } from './ui-nav.js';
 
 describe('activeSurface', () => {
@@ -61,5 +62,18 @@ describe('dialogPresence', () => {
   });
   it('makes an open dialog modal', () => {
     expect(dialogPresence(true)).toEqual({ inert: false, modal: true });
+  });
+});
+
+describe('followTarget', () => {
+  it('follows a bus capsule by route and id', () => {
+    expect(followTarget({ layerId: 'bus-capsules', id: 'bus-1', rt: '22' })).toEqual({
+      kind: 'bus',
+      id: 'bus-1',
+      label: '22 · bus-1',
+    });
+  });
+  it('returns null for a station hit', () => {
+    expect(followTarget({ layerId: 'station-ring', id: 'belmont' })).toBeNull();
   });
 });

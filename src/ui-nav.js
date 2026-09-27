@@ -63,6 +63,20 @@ export function dialogPresence(isOpen) {
 }
 
 /**
+ * A bus capsule tap follows that bus. Other hits are not a follow target.
+ * @param {{ layerId?: string, id?: string, rt?: string }|null|undefined} hit
+ * @returns {{ kind: 'bus', id: string, label: string }|null}
+ */
+export function followTarget(hit) {
+  if (hit?.layerId !== 'bus-capsules' || !hit.id) return null;
+  return {
+    kind: 'bus',
+    id: hit.id,
+    label: `${hit.rt} · ${hit.id}`,
+  };
+}
+
+/**
  * Write `dialogPresence` onto a dialog element.
  * @param {HTMLElement|null|undefined} el
  * @param {boolean} isOpen
