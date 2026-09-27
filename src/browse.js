@@ -37,7 +37,7 @@ import {
   thumbIndexFromRatio,
 } from './browse-titles.js';
 import { bikeStatusMeta } from './bike-status.js';
-import { applyDialogPresence } from './ui-nav.js';
+import { applyDialogPresence, focusOpenDialog, trapDialogTab } from './ui-nav.js';
 
 /** DOM budget for one bike list. The caption names the rows this cap hides. */
 const BIKE_LIST_CAP = 200;
@@ -430,6 +430,7 @@ export function createBrowse({
       renderSearch('');
     }
     if (nextMode === 'search' || showBusSearch || showBikeSearch) searchInput?.focus();
+    focusOpenDialog(browseEl);
   }
 
   /**
@@ -477,6 +478,10 @@ export function createBrowse({
   }
 
   // ---- event wiring -----------------------------------------------------
+
+  browseEl?.addEventListener('keydown', (event) => {
+    trapDialogTab(event, browseEl, isOpen());
+  });
 
   document.getElementById('browse-close')?.addEventListener('click', close);
   document.getElementById('browse-back')?.addEventListener('click', () => {
