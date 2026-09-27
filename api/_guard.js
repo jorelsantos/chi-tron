@@ -298,9 +298,27 @@ export function guardRequest(req, res, { metered = true } = {}) {
   // ours and should not become a general-purpose relay. They must not draw
   // down the daily budget, though — that budget exists to protect the two
   // keyed feeds, and a 2-minute alerts poll would eat it for no reason.
-  if (metered && !budget.consume()) {
+  // The bus proxy also passes metered:false, then calls consumeBudget()
+  // only after its method allowlist. A rejected method must not spend a unit.
+  if (metered && !consumeBudget(res)) return false;
+  return true;
+}
+
+/**
+ * Reserves one unit of the shared daily budget. Writes 503 when the ceiling
+ * is met. The bus proxy calls this only after its method allowlist.
+ * @param {any} res
+ * @returns {boolean} true when the caller should fetch upstream
+ */
+export function consumeBudget(res) {
+  if (!budget.consume()) {
     res.status(503).json({ error: 'daily budget reached' });
     return false;
   }
   return true;
+}
+
+/** @returns {number} units spent from the shared daily budget today. */
+export function used() {
+  return budget.used();
 }
