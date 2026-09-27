@@ -30,12 +30,21 @@ export const RATE_LIMIT = 120;
 export const RATE_WINDOW_MS = 60_000;
 
 /**
- * Upstream requests one warm instance may forward per local day (layer 3).
- * Sized for multi-instance Vercel: ~8k × ~10 instances ≈ 80k, under CTA's
- * 100k/day hard cap, with edge cache doing most of the train traffic.
- * Was 20k when train proxies were no-store and every viewer hit origin.
+ * Per-name ceilings for one warm instance (layer 3). Train positions,
+ * station arrivals, and bus each keep their own ledger. The three numbers
+ * sum to 8k, so ~10 instances stay under CTA's 100k/day hard cap. Edge
+ * cache still absorbs most viewer traffic.
+ * @type {Record<'tt' | 'arrivals' | 'bus', number>}
  */
-export const DAILY_BUDGET = 8_000;
+export const BUDGET_CEILINGS = {
+  tt: 5_000,
+  arrivals: 1_000,
+  bus: 2_000,
+};
+
+/** Sum of the three named ceilings. */
+export const DAILY_BUDGET =
+  BUDGET_CEILINGS.tt + BUDGET_CEILINGS.arrivals + BUDGET_CEILINGS.bus;
 
 /**
  * Edge cache for train positions. Client poll is 5s; one shared window per
@@ -223,11 +232,44 @@ export function createDailyBudget({ ceiling = DAILY_BUDGET, now = () => Date.now
   };
 }
 
-// Module-level singletons: one warm instance shares these across the three
-// handlers, which is what makes the budget a per-instance total rather than
-// three independent allowances.
+/**
+ * Three lazy ledgers on one warm instance. A name is created on first use.
+ * @param {{ now?: () => number }} [opts]
+ */
+export function createNamedBudgets({ now = () => Date.now() } = {}) {
+  /** @type {Partial<Record<'tt' | 'arrivals' | 'bus', ReturnType<typeof createDailyBudget>>>} */
+  const slots = {};
+  /**
+   * @param {'tt' | 'arrivals' | 'bus'} name
+   */
+  function slot(name) {
+    if (!slots[name]) {
+      slots[name] = createDailyBudget({ ceiling: BUDGET_CEILINGS[name], now });
+    }
+    return slots[name];
+  }
+  return {
+    /**
+     * @param {'tt' | 'arrivals' | 'bus'} name
+     * @returns {boolean}
+     */
+    consume(name) {
+      return slot(name).consume();
+    },
+    /**
+     * @param {'tt' | 'arrivals' | 'bus'} name
+     * @returns {number}
+     */
+    used(name) {
+      return slots[name] ? slots[name].used() : 0;
+    },
+  };
+}
+
+// One limiter and one named-budget set per warm instance. The three ceilings
+// are independent. Their sum is DAILY_BUDGET.
 const limiter = createRateLimiter();
-const budget = createDailyBudget();
+const budgets = createNamedBudgets();
 
 /**
  * True for the query parameter Vercel adds to describe a catch-all route's
@@ -276,9 +318,10 @@ export function isAllowedBusMethod(method) {
  * Runs all three layers and writes the rejection response itself.
  * @param {any} req
  * @param {any} res
+ * @param {{ metered?: boolean, budget?: 'tt' | 'arrivals' | 'bus' }} [opts]
  * @returns {boolean} true when the caller should proceed to fetch upstream.
  */
-export function guardRequest(req, res, { metered = true } = {}) {
+export function guardRequest(req, res, { metered = true, budget = 'tt' } = {}) {
   if (req.method && req.method !== 'GET' && req.method !== 'HEAD') {
     res.status(405).json({ error: 'method not allowed' });
     return false;
@@ -296,29 +339,34 @@ export function guardRequest(req, res, { metered = true } = {}) {
   // Keyless upstreams (CTA's Customer Alerts API) pass metered:false. They
   // still need the origin and rate-limit layers, because this function is
   // ours and should not become a general-purpose relay. They must not draw
-  // down the daily budget, though — that budget exists to protect the two
-  // keyed feeds, and a 2-minute alerts poll would eat it for no reason.
-  // The bus proxy also passes metered:false, then calls consumeBudget()
+  // down a named budget. Those ceilings protect the keyed tt, arrivals, and
+  // bus proxies, and a 2-minute alerts poll would eat one for no reason.
+  // The bus proxy also passes metered:false, then calls consumeBudget(res, 'bus')
   // only after its method allowlist. A rejected method must not spend a unit.
-  if (metered && !consumeBudget(res)) return false;
+  if (metered && !consumeBudget(res, budget)) return false;
   return true;
 }
 
 /**
- * Reserves one unit of the shared daily budget. Writes 503 when the ceiling
- * is met. The bus proxy calls this only after its method allowlist.
+ * Reserves one unit of a named daily budget. Writes 503 when that ceiling
+ * is met. Defaults to the bus budget. The bus proxy calls this only after
+ * its method allowlist.
  * @param {any} res
+ * @param {'tt' | 'arrivals' | 'bus'} [name]
  * @returns {boolean} true when the caller should fetch upstream
  */
-export function consumeBudget(res) {
-  if (!budget.consume()) {
+export function consumeBudget(res, name = 'bus') {
+  if (!budgets.consume(name)) {
     res.status(503).json({ error: 'daily budget reached' });
     return false;
   }
   return true;
 }
 
-/** @returns {number} units spent from the shared daily budget today. */
-export function used() {
-  return budget.used();
+/**
+ * @param {'tt' | 'arrivals' | 'bus'} [name]
+ * @returns {number} units spent from that named budget today. Defaults to bus.
+ */
+export function used(name = 'bus') {
+  return budgets.used(name);
 }
