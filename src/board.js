@@ -14,6 +14,7 @@ import { lineDefByKey, lineColor, liveLineKeys, cleanStationName } from './catal
 import { busRouteDef } from './bus-catalog.js';
 import { escapeHtml, emptyState } from './dom.js';
 import { bikeCountTone, dockCountTone } from './bike-status.js';
+import { applyDialogPresence, focusOpenDialog, trapDialogTab } from './ui-nav.js';
 
 const FEED_ERROR_RE = /key|HTTP|failed|network/i;
 
@@ -206,7 +207,9 @@ export function createBoard({
   function beginOpen(title, meta) {
     onOpen();
     sheetEl?.classList.add('open');
+    applyDialogPresence(sheetEl, true);
     syncBackUi();
+    focusOpenDialog(sheetEl);
     if (sheetTitle) sheetTitle.textContent = title;
     if (sheetMeta) sheetMeta.textContent = meta;
     if (sheetUpdated) sheetUpdated.textContent = 'AS OF —';
@@ -375,9 +378,14 @@ export function createBoard({
     busArrivals.close();
     sheetEl?.classList.remove('open');
     sheetEl?.classList.remove('has-back');
+    applyDialogPresence(sheetEl, false);
     boardNav = null;
     if (restoreBrowse && nav && nav.source !== 'map') onRestoreBrowse(nav);
   }
+
+  sheetEl?.addEventListener('keydown', (event) => {
+    trapDialogTab(event, sheetEl, isOpen());
+  });
 
   document.getElementById('sheet-close')?.addEventListener('click', () => close());
   document.getElementById('sheet-back')?.addEventListener('click', () => close({ restoreBrowse: true }));
