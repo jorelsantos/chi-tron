@@ -59,11 +59,22 @@ export function capBikeList(list) {
 }
 
 /**
+ * @param {{ ready: boolean, failed: boolean }} state
+ * @returns {'loading'|'error'|'list'}
+ */
+export function bikeListPhase({ ready, failed }) {
+  if (failed) return 'error';
+  if (ready) return 'list';
+  return 'loading';
+}
+
+/**
  * @param {object} deps
  * @param {() => Record<string, object>} deps.getStations snapped station index
  * @param {import('./bus-data.js').BusData} deps.busData
  * @param {() => import('./divvy.js').DivvyLive[]} [deps.getBikeStations]
  * @param {() => boolean} [deps.bikeReady]
+ * @param {() => boolean} [deps.bikeFailed]
  * @param {() => void} [deps.ensureBikeData]
  * @param {(station: object, opts: object) => void} deps.onOpenStation
  * @param {(stop: object, opts: object) => void} deps.onOpenBusStop
@@ -76,6 +87,7 @@ export function createBrowse({
   busData,
   getBikeStations = () => [],
   bikeReady = () => false,
+  bikeFailed = () => false,
   ensureBikeData = () => {},
   onOpenStation,
   onOpenBusStop,
@@ -215,10 +227,22 @@ export function createBrowse({
       searchInput.value = bikeQuery;
     }
     setTitle(ROOT_TITLES.bike);
-    if (!bikeReady()) {
-      showEmpty(browseList, 'LOADING…');
-      ensureBikeData();
-      return;
+    const phase = bikeListPhase({ ready: bikeReady(), failed: bikeFailed() });
+    switch (phase) {
+      case 'loading':
+        showEmpty(browseList, 'LOADING…');
+        ensureBikeData();
+        return;
+      case 'error':
+        showEmpty(browseList, 'FEED ERROR');
+        return;
+      case 'list':
+        break;
+      default: {
+        /** @type {never} */
+        const unreachable = phase;
+        throw new Error(`unknown bike list phase: ${unreachable}`);
+      }
     }
     const q = bikeQuery.trim().toLowerCase();
     let list = getBikeStations();
