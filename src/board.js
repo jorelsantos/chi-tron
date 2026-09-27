@@ -35,6 +35,26 @@ export function boardRowsLabel(rows, error, loaded) {
 }
 
 /**
+ * Accessible name of the station sheet for the board that is open.
+ * @param {'train'|'bus'|'bike'} kind
+ * @returns {'Station arrivals'|'Bus arrivals'|'Bike station'}
+ */
+export function sheetAriaLabel(kind) {
+  switch (kind) {
+    case 'train':
+      return 'Station arrivals';
+    case 'bus':
+      return 'Bus arrivals';
+    case 'bike':
+      return 'Bike station';
+    default: {
+      const unknown = /** @type {never} */ (kind);
+      throw new Error(`Unknown board kind: ${unknown}`);
+    }
+  }
+}
+
+/**
  * @typedef {{
  *   source: 'map'|'stations'|'search',
  *   kind: 'train'|'bus'|'bike',
@@ -208,6 +228,9 @@ export function createBoard({
     onOpen();
     sheetEl?.classList.add('open');
     applyDialogPresence(sheetEl, true);
+    if (sheetEl && boardNav) {
+      sheetEl.setAttribute('aria-label', sheetAriaLabel(boardNav.kind));
+    }
     syncBackUi();
     focusOpenDialog(sheetEl);
     if (sheetTitle) sheetTitle.textContent = title;
