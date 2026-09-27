@@ -48,6 +48,14 @@ describe('public-ready chrome', () => {
     expect(html).not.toContain('#station-sheet.open ~ #nearest-chip');
   });
 
+  it('keeps the instrument dock on screen', () => {
+    expect(html).not.toMatch(/#sidebar\.nav-compact[\s\S]{0,120}?display:\s*none/);
+    expect(html).not.toContain('#sidebar { display: none !important; }');
+    expect(html).toMatch(
+      /@media \(max-width: 720px\) \{\s*#sidebar \{\s*display: flex;\s*left: 16px;\s*right: 16px;\s*top: auto;\s*bottom: 16px;\s*width: auto;\s*max-height: 40vh;\s*\}/,
+    );
+  });
+
   it('ships a standalone manifest', () => {
     const manifest = JSON.parse(readFileSync(join(root, 'public/manifest.webmanifest'), 'utf8'));
     expect(manifest.display).toBe('standalone');
