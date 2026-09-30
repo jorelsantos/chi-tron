@@ -3,12 +3,12 @@
 
 const SIDEBAR_BIASED_CENTER = [-87.6198, 41.8781]; // ~0.008deg east of Loop for sidebar
 
-/** Tracker cold-open: flat aerial Loop (Google Maps 2D default). */
+/** Tracker cold-open: pitched Loop so building mass and the L rails show. */
 export const AERIAL_2D = {
   center: SIDEBAR_BIASED_CENTER,
-  zoom: 12.6,
-  pitch: 0,
-  bearing: 0,
+  zoom: 13.8,
+  pitch: 48,
+  bearing: -12,
 };
 
 /** System-wide live overview (momentary LIVE action). */
