@@ -180,16 +180,52 @@
       font-size: 8px;
       font-weight: 600;
       letter-spacing: 0.14em;
-      color: #7dffb0;
-      background: rgba(40, 120, 70, 0.28);
-      border: 1px solid rgba(90, 220, 140, 0.35);
+      color: rgba(180, 196, 214, 0.85);
+      background: rgba(80, 96, 120, 0.28);
+      border: 1px solid rgba(160, 180, 200, 0.28);
       text-shadow: none;
     }
     #wordmark small::before {
       content: "";
       width: 5px; height: 5px; border-radius: 50%;
+      background: #9aa8b8;
+      box-shadow: none;
+    }
+    #wordmark small[data-state="LIVE"] {
+      color: #7dffb0;
+      background: rgba(40, 120, 70, 0.28);
+      border-color: rgba(90, 220, 140, 0.35);
+    }
+    #wordmark small[data-state="LIVE"]::before {
       background: #3bff6f;
       box-shadow: 0 0 6px rgba(59, 255, 111, 0.9);
+    }
+    #wordmark small[data-state="OFF"] {
+      color: #ffb4bc;
+      background: rgba(120, 30, 40, 0.35);
+      border-color: rgba(255, 80, 100, 0.45);
+    }
+    #wordmark small[data-state="OFF"]::before {
+      background: #ff3b4e;
+      box-shadow: 0 0 6px rgba(255, 59, 78, 0.9);
+    }
+    #wordmark small[data-state="HOLD"] {
+      color: #ffd27a;
+      background: rgba(120, 80, 20, 0.35);
+      border-color: rgba(255, 176, 32, 0.45);
+    }
+    #wordmark small[data-state="HOLD"]::before {
+      background: #ffb020;
+      box-shadow: 0 0 6px rgba(255, 176, 32, 0.9);
+    }
+    #wordmark small[data-state="SIM"] {
+      color: #ffc49a;
+      background: rgba(120, 60, 20, 0.35);
+      border-color: rgba(255, 140, 60, 0.45);
+    }
+    #wordmark small[data-state="SIM"]::before {
+      background: #ff8c3c;
+      box-shadow: 0 0 6px rgba(255, 140, 60, 0.9);
     }
 
     /* Dev/status HUD — hidden on tracker mobile; DOM kept for main.js */
@@ -1325,7 +1361,7 @@
       </svg>
     </button>
     <div id="hud-bar">
-      <div id="wordmark">CHI-TRON<small id="feed-badge">BOOT</small></div>
+      <div id="wordmark">CHI-TRON<small id="feed-badge" data-state="BOOT">BOOT</small></div>
     </div>
   </div>
   <div id="map-view-controls" class="map-view-controls" role="group" aria-label="Map view">

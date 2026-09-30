@@ -41,7 +41,9 @@ let busFeedState = 'boot';
 
 function paintFeedBadge() {
   if (!feedBadgeEl) return;
-  feedBadgeEl.textContent = feedBadge(feedStatus, busFeedState);
+  const label = feedBadge(feedStatus, busFeedState);
+  feedBadgeEl.textContent = label;
+  feedBadgeEl.dataset.state = label;
 }
 
 // U14's states (mock/lost/hold/live) plus U9's bus-only 'disabled' all share
