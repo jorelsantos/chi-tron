@@ -28,13 +28,23 @@ import { createBoard } from './board.js';
 import { createBrowse } from './browse.js';
 import { DivvyEngine, normalizeStations } from './divvy.js';
 import { alignTrainToRibbon } from './train-consist.js';
+import { feedBadge } from './feed-badge.js';
 
 const statusEl = document.getElementById('status');
 const busStatusEl = document.getElementById('bus-status');
 const clockEl = document.getElementById('clock');
 const fpsEl = document.getElementById('fps');
+const feedBadgeEl = document.getElementById('feed-badge');
 
 let feedStatus = 'boot'; // read by hud.js's tick() to render the em-dash no-data state
+let busFeedState = 'boot';
+
+function paintFeedBadge() {
+  if (!feedBadgeEl) return;
+  const label = feedBadge(feedStatus, busFeedState);
+  feedBadgeEl.textContent = label;
+  feedBadgeEl.dataset.state = label;
+}
 
 // U14's states (mock/lost/hold/live) plus U9's bus-only 'disabled' all share
 // one className rule and one "state -> label" lookup shape.
@@ -56,6 +66,7 @@ const TRAIN_STATUS_LABELS = {
 function setStatus(state) {
   feedStatus = state;
   renderFeedStatus(statusEl, state, TRAIN_STATUS_LABELS);
+  paintFeedBadge();
 }
 
 const BUS_STATUS_LABELS = {
@@ -66,7 +77,9 @@ const BUS_STATUS_LABELS = {
   disabled: 'BUS OFF',
 };
 function setBusStatus(state = 'disabled') {
+  busFeedState = state;
   renderFeedStatus(busStatusEl, state, BUS_STATUS_LABELS);
+  paintFeedBadge();
 }
 
 setInterval(() => {
