@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { TRACK_GLOW, TRACK_GLOW_LAYER_IDS } from './map-stage.js';
+import { AERIAL_2D } from './style.js';
+
+describe('AERIAL_2D cold open', () => {
+  it('opens at zoom 13.8, pitch 48, and bearing -12', () => {
+    expect(AERIAL_2D.zoom).toBe(13.8);
+    expect(AERIAL_2D.pitch).toBe(48);
+    expect(AERIAL_2D.bearing).toBe(-12);
+  });
+});
 
 describe('TRACK_GLOW B1 recipe', () => {
   it('keeps the three-layer stack thin and dim on the wide pass', () => {
