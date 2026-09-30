@@ -409,7 +409,7 @@ async function boot() {
       else releaseFollow();
     }
 
-    hud.tick(trains);
+    hud.tick(trains, buses, bikeStationsReady ? divvyEngine.stations : [], bikeStationsReady);
     const center = map.getCenter();
     const currentTime = now();
     if (map.getSource('l-tracks')) {

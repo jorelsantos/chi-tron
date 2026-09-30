@@ -200,6 +200,38 @@
     #telemetry {
       display: none !important;
     }
+    /* Corner figures sit under the 2D/3D stack so they do not cover it. */
+    #ride-counts {
+      top: calc(max(10px, env(safe-area-inset-top)) + 96px);
+      right: var(--safe-r);
+      z-index: 12;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    #ride-counts .ride-fig {
+      display: flex;
+      align-items: baseline;
+      justify-content: flex-end;
+      gap: 6px;
+      min-width: 72px;
+      padding: 3px 8px;
+      border-radius: var(--glass-radius-xs);
+      background: rgba(0, 0, 0, 0.68);
+      box-shadow: 0 0 0 0.5px var(--glass-white-3) inset;
+    }
+    #ride-counts .ride-num {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--type-primary);
+    }
+    #ride-counts .ride-tag {
+      font-size: 8px;
+      letter-spacing: 0.14em;
+      color: var(--hud-dim);
+    }
     #status.live { color: #3bff6f; }
     #status.lost { color: #ff3b4e; }
     #status.hold { color: #ffb020; }
@@ -1331,6 +1363,11 @@
   <div id="map-view-controls" class="map-view-controls" role="group" aria-label="Map view">
     <button type="button" class="map-view-btn lg" id="btn-view-2d" aria-pressed="true">2D</button>
     <button type="button" class="map-view-btn lg" id="btn-view-3d" aria-pressed="false">3D</button>
+  </div>
+  <div id="ride-counts" class="hud" aria-label="Trains, buses, and docks in view">
+    <span class="ride-fig"><span class="ride-num" data-ride="train">0</span><span class="ride-tag">L</span></span>
+    <span class="ride-fig"><span class="ride-num" data-ride="bus">0</span><span class="ride-tag">BUS</span></span>
+    <span class="ride-fig"><span class="ride-num" data-ride="dock">--</span><span class="ride-tag">DOCK</span></span>
   </div>
   <div class="hud" id="clock">--:--:--</div>
   <div class="hud" id="status">BOOT</div>

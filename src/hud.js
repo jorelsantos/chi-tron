@@ -1,7 +1,7 @@
 // U12: instrument sidebar (LINES + DISPLAY) and top-right telemetry/compass
 // chrome (R6, R8). This module owns the DOM for that chrome and the toggle
 // interactions; main.js just wires the map/engine into it and calls
-// `hud.tick(trains)` once per animation frame.
+// `hud.tick(trains, buses, bikes, bikeReady)` once per animation frame.
 //
 // State it mutates in place rather than owning outright, so main.js's
 // existing frame loop (which already closes over `visibleLines` and reads
@@ -22,6 +22,7 @@
 
 import { LOOP_PRESET, CITY_PRESET } from './style.js';
 import { LINE_KEYS, rgbString } from './layers.js';
+import { ridesInView } from './ride-counts.js';
 
 const LINE_NAMES = {
   Red: 'Red Line',
@@ -83,6 +84,9 @@ export function createHud({
   const lineRowsEl = document.getElementById('line-rows');
   const displayRowsEl = document.getElementById('display-rows');
   const telemetryCountEl = document.getElementById('telemetry-count');
+  const rideTrainEl = document.querySelector('#ride-counts [data-ride="train"]');
+  const rideBusEl = document.querySelector('#ride-counts [data-ride="bus"]');
+  const rideDockEl = document.querySelector('#ride-counts [data-ride="dock"]');
   const compassRose = document.getElementById('compass-rose');
 
   const lineButtons = new Map();
@@ -346,12 +350,16 @@ export function createHud({
     return cachedBounds;
   }
 
+  function writeRideFigure(el, value) {
+    if (!el) return;
+    el.textContent = value === null ? '--' : String(value);
+  }
+
   /**
-   * Called once per animation frame from main.js with the engine's current
-   * (non-removed) train list. Updates the LINES section's system-wide
-   * counts and the top-right IN VIEW telemetry.
+   * Called once per animation frame from main.js. Updates the LINES section,
+   * the hidden train telemetry, and the three corner figures.
    */
-  function tick(trains) {
+  function tick(trains, buses = [], bikes = [], bikeReady = false) {
     const status = getStatus ? getStatus() : null;
     const noData = status === 'lost';
 
@@ -378,6 +386,18 @@ export function createHud({
     }
 
     if (telemetryCountEl) telemetryCountEl.textContent = String(inView);
+
+    const counts = ridesInView({
+      trains,
+      buses,
+      docks: bikes,
+      inBounds: (pos) => cachedBounds.contains(pos),
+      visibleLines,
+      bikeReady,
+    });
+    writeRideFigure(rideTrainEl, counts.trains);
+    writeRideFigure(rideBusEl, counts.buses);
+    writeRideFigure(rideDockEl, counts.bikes);
   }
 
   refreshSystemStatus(); // empty state until the first alerts poll resolves
